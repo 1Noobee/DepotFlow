@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - DepotFlow{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-semibold mb-6">Dashboard</h1>
+
+{% if depot_today %}
+    {# Depot Manager / Depot Officer: today's figures for their own depot #}
+    <p class="text-sm text-gray-500 mb-4">{{ request.user.depot.name }} &middot; {{ today }}</p>
+
+    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
+        <div class="bg-white p-5 rounded shadow">
+            <p class="text-sm text-gray-500">Units Sold Today</p>
+            <p class="text-2xl font-semibold">{{ depot_today.total_quantity }}</p>
+        </div>
+        <div class="bg-white p-5 rounded shadow">
+            <p class="text-sm text-gray-500">Revenue Today</p>
+            <p class="text-2xl font-semibold">&#8358;{{ depot_net_profit.revenue }}</p>
+        </div>
+        <div class="bg-white p-5 rounded shadow">
+            <p class="text-sm text-gray-500">Expenses Today</p>
+            <p class="text-2xl font-semibold">&#8358;{{ depot_net_profit.total_expenses }}</p>
+        </div>
+        <div class="bg-white p-5 rounded shadow">
+            <p class="text-sm text-gray-500">Net Position Today</p>
+            <p class="text-2xl font-semibold
+                {% if depot_net_profit.net_profit < 0 %}text-red-600{% else %}text-green-700{% endif %}">
+                &#8358;{{ depot_net_profit.net_profit }}
+            </p>
+        </div>
+    </div>
+
+    <h2 class="font-semibold text-lg mb-3">Today's Sales by Product</h2>
+    <div class="bg-white rounded shadow divide-y">
+        {% for row in depot_today.by_product %}
+        <div class="px-4 py-3 flex items-center justify-between text-sm">
+            <span>{{ row.product__name }} <span class="text-gray-400">({{ row.product__sku }})</span></span>
+            <span class="text-gray-600">{{ row.quantity }} units &middot; &#8358;{{ row.revenue }}</span>
+        </div>
+        {% empty %}
+        <div class="px-4 py-6 text-gray-500 text-sm">No sales finalized yet today.</div>
+        {% endfor %}
+    </div>
+
+{% elif no_depot_assigned %}
+    <div class="bg-white p-6 rounded shadow text-sm text-gray-600">
+        No depot is assigned to your account yet, so there are no depot KPIs to show.
+        Contact a Super Admin to get a depot assigned.
+    </div>
+
+{% elif territory_comparison %}
+    {# Territory Manager: month-to-date depot ranking within their territory #}
+    <p class="text-sm text-gray-500 mb-4">
+        {{ territory_comparison.territory }} &middot; {{ month_start }} to {{ today }}
+    </p>
+
+    <h2 class="font-semibold text-lg mb-3">Depot Ranking (Net Profit, Month to Date)</h2>
+    <div class="bg-white rounded shadow divide-y">
+        {% for row in territory_comparison.depots %}
+        <div class="px-4 py-3 flex items-center justify-between text-sm">
+            <span class="font-medium">{{ forloop.counter }}. {{ row.depot }}</span>
+            <span class="{% if row.net_profit < 0 %}text-red-600{% else %}text-green-700{% endif %}">
+                &#8358;{{ row.net_profit }}
+                <span class="text-gray-400 font-normal">
+                    (rev &#8358;{{ row.revenue }} &middot; exp &#8358;{{ row.total_expenses }})
+                </span>
+            </span>
+        </div>
+        {% empty %}
+        <div class="px-4 py-6 text-gray-500 text-sm">No depots in this territory yet.</div>
+        {% endfor %}
+    </div>
+
+{% elif no_territory_assigned %}
+    <div class="bg-white p-6 rounded shadow text-sm text-gray-600">
+        No territory is assigned to your account yet, so there's no depot comparison to show.
+        Contact a Super Admin to get a territory assigned.
+    </div>
+
+{% elif all_territory_comparisons %}
+    {# Super Admin: same ranking, one table per territory, business-wide #}
+    <p class="text-sm text-gray-500 mb-6">{{ month_start }} to {{ today }} &middot; all territories</p>
+
+    {% for comparison in all_territory_comparisons %}
+    <h2 class="font-semibold text-lg mb-3">{{ comparison.territory }}</h2>
+    <div class="bg-white rounded shadow divide-y mb-8">
+        {% for row in comparison.depots %}
+        <div class="px-4 py-3 flex items-center justify-between text-sm">
+            <span class="font-medium">{{ forloop.counter }}. {{ row.depot }}</span>
+            <span class="{% if row.net_profit < 0 %}text-red-600{% else %}text-green-700{% endif %}">
+                &#8358;{{ row.net_profit }}
+                <span class="text-gray-400 font-normal">
+                    (rev &#8358;{{ row.revenue }} &middot; exp &#8358;{{ row.total_expenses }})
+                </span>
+            </span>
+        </div>
+        {% empty %}
+        <div class="px-4 py-6 text-gray-500 text-sm">No depots in this territory yet.</div>
+        {% endfor %}
+    </div>
+    {% empty %}
+    <div class="bg-white p-6 rounded shadow text-sm text-gray-600">No territories exist yet.</div>
+    {% endfor %}
+
+{% else %}
+    <div class="bg-white p-6 rounded shadow text-sm text-gray-600">
+        There's no KPI dashboard for your role yet — use the links below to get around DepotFlow.
+    </div>
+{% endif %}
+{% endblock %}
