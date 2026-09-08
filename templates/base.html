@@ -83,6 +83,7 @@
                         Dashboard
                     </a>
 
+                    {% if nav_show_depots %}
                     <div class="relative" @click.outside="depots = false">
                         <button type="button" @click="depots = !depots" :aria-expanded="depots"
                                 class="nav-link flex items-center gap-1 {% if request.resolver_match.app_name == 'depots' %}nav-link-active{% endif %}">
@@ -94,7 +95,9 @@
                             <a href="{% url 'depots:territory_list' %}" class="dropdown-link">Territories</a>
                         </div>
                     </div>
+                    {% endif %}
 
+                    {% if nav_show_inventory %}
                     <div class="relative" @click.outside="inventory = false">
                         <button type="button" @click="inventory = !inventory" :aria-expanded="inventory"
                                 class="nav-link flex items-center gap-1 {% if request.resolver_match.app_name == 'inventory' %}nav-link-active{% endif %}">
@@ -108,7 +111,9 @@
                             <a href="{% url 'inventory:promotion_list' %}" class="dropdown-link">Promotions</a>
                         </div>
                     </div>
+                    {% endif %}
 
+                    {% if nav_show_operations %}
                     <div class="relative" @click.outside="ops = false">
                         <button type="button" @click="ops = !ops" :aria-expanded="ops"
                                 class="nav-link flex items-center gap-1 {% if request.resolver_match.app_name == 'operations' %}nav-link-active{% endif %}">
@@ -121,7 +126,9 @@
                             <a href="{% url 'operations:salesman_list' %}" class="dropdown-link">Salesmen</a>
                         </div>
                     </div>
+                    {% endif %}
 
+                    {% if nav_show_sales %}
                     <div class="relative" @click.outside="sales = false">
                         <button type="button" @click="sales = !sales" :aria-expanded="sales"
                                 class="nav-link flex items-center gap-1 {% if request.resolver_match.app_name == 'sales' %}nav-link-active{% endif %}">
@@ -133,7 +140,9 @@
                             <a href="{% url 'sales:customer_list' %}" class="dropdown-link">Customers</a>
                         </div>
                     </div>
+                    {% endif %}
 
+                    {% if nav_show_finance_full %}
                     <div class="relative" @click.outside="finance = false">
                         <button type="button" @click="finance = !finance" :aria-expanded="finance"
                                 class="nav-link flex items-center gap-1 {% if request.resolver_match.app_name == 'finance' %}nav-link-active{% endif %}">
@@ -147,6 +156,17 @@
                             <a href="{% url 'finance:ledger_list' %}" class="dropdown-link">Business Ledger</a>
                         </div>
                     </div>
+                    {% elif nav_show_finance_expenses_only %}
+                    <a href="{% url 'finance:expense_list' %}"
+                       class="nav-link {% if request.resolver_match.url_name == 'expense_list' %}nav-link-active{% endif %}">
+                        Finance
+                    </a>
+                    {% elif nav_show_finance_ledger_only %}
+                    <a href="{% url 'finance:ledger_list' %}"
+                       class="nav-link {% if request.resolver_match.url_name == 'ledger_list' %}nav-link-active{% endif %}">
+                        Finance
+                    </a>
+                    {% endif %}
 
                     <a href="{% url 'accounts:team_list' %}"
                        class="nav-link {% if request.resolver_match.url_name == 'team_list' %}nav-link-active{% endif %}">
@@ -184,30 +204,46 @@
         <div x-show="mobileOpen" x-cloak x-transition.opacity.duration.100ms class="md:hidden border-t border-white/10 pb-3">
             <a href="{% url 'reports:dashboard' %}" class="mobile-link">Dashboard</a>
 
+            {% if nav_show_depots %}
             <p class="mobile-section-label">Depots</p>
             <a href="{% url 'depots:depot_list' %}" class="mobile-link">Depots</a>
             <a href="{% url 'depots:territory_list' %}" class="mobile-link">Territories</a>
+            {% endif %}
 
+            {% if nav_show_inventory %}
             <p class="mobile-section-label">Inventory</p>
             <a href="{% url 'inventory:product_list' %}" class="mobile-link">Products</a>
             <a href="{% url 'inventory:supplier_list' %}" class="mobile-link">Suppliers</a>
             <a href="{% url 'inventory:stock_receipt_list' %}" class="mobile-link">Stock Receipts</a>
             <a href="{% url 'inventory:promotion_list' %}" class="mobile-link">Promotions</a>
+            {% endif %}
 
+            {% if nav_show_operations %}
             <p class="mobile-section-label">Operations</p>
             <a href="{% url 'operations:load_list' %}" class="mobile-link">Vehicle Loads</a>
             <a href="{% url 'operations:vehicle_list' %}" class="mobile-link">Vehicles</a>
             <a href="{% url 'operations:salesman_list' %}" class="mobile-link">Salesmen</a>
+            {% endif %}
 
+            {% if nav_show_sales %}
             <p class="mobile-section-label">Sales</p>
             <a href="{% url 'sales:sale_list' %}" class="mobile-link">Sales</a>
             <a href="{% url 'sales:customer_list' %}" class="mobile-link">Customers</a>
+            {% endif %}
 
+            {% if nav_show_finance_full %}
             <p class="mobile-section-label">Finance</p>
             <a href="{% url 'finance:expense_list' %}" class="mobile-link">Expenses</a>
             <a href="{% url 'finance:supplier_payment_list' %}" class="mobile-link">Supplier Payments</a>
             <a href="{% url 'finance:supplier_rebate_list' %}" class="mobile-link">Supplier Rebates</a>
             <a href="{% url 'finance:ledger_list' %}" class="mobile-link">Business Ledger</a>
+            {% elif nav_show_finance_expenses_only %}
+            <p class="mobile-section-label">Finance</p>
+            <a href="{% url 'finance:expense_list' %}" class="mobile-link">Expenses</a>
+            {% elif nav_show_finance_ledger_only %}
+            <p class="mobile-section-label">Finance</p>
+            <a href="{% url 'finance:ledger_list' %}" class="mobile-link">Business Ledger</a>
+            {% endif %}
 
             <p class="mobile-section-label">Account</p>
             <a href="{% url 'accounts:team_list' %}" class="mobile-link">Team</a>
