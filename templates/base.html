@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -32,6 +33,7 @@
         };
     </script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+    <script defer src="{% static 'core/js/dynamic_formset.js' %}"></script>
 
     <style type="text/tailwindcss">
         @layer base {
@@ -39,6 +41,9 @@
                 font-family: 'Space Grotesk', sans-serif;
             }
             [x-cloak] { display: none !important; }
+            /* Formset DELETE checkboxes are driven by the Remove button
+               in partials/dynamic_formset.html, not shown directly. */
+            [id^="div_id_"][id$="-DELETE"] { display: none; }
         }
         @layer components {
             .nav-link {

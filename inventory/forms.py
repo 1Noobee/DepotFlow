@@ -53,7 +53,7 @@ StockReceiptItemFormSet = inlineformset_factory(
     StockReceipt,
     StockReceiptItem,
     fields=["product", "quantity", "cost_price", "supplier_discount", "supplier_rebate"],
-    extra=5,
+    extra=1,
     can_delete=True,
 )
 

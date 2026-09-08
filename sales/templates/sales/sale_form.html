@@ -16,20 +16,12 @@
     <div class="bg-white p-6 rounded shadow max-w-2xl">
         <h2 class="font-semibold mb-4">Items</h2>
         <p class="text-xs text-gray-500 mb-4">
-            Leave a row blank to skip it. Prices are pulled automatically
-            from current pricing at the moment you save — sold + returned
-            quantity for a product can't exceed what was loaded.
+            Prices are pulled automatically from current pricing at the
+            moment you save — sold + returned quantity for a product
+            can't exceed what was loaded.
         </p>
 
-        {{ formset.management_form }}
-
-        <div class="space-y-6">
-            {% for item_form in formset %}
-            <div class="border-t pt-4">
-                {{ item_form|crispy }}
-            </div>
-            {% endfor %}
-        </div>
+        {% include "partials/dynamic_formset.html" with formset=formset add_label="Sale Item" %}
     </div>
 
     <div class="mt-6">

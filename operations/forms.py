@@ -29,7 +29,7 @@ VehicleLoadItemFormSet = inlineformset_factory(
     VehicleLoad,
     VehicleLoadItem,
     fields=["product", "quantity", "promo_discount"],
-    extra=5,
+    extra=1,
     can_delete=True,
 )
 
@@ -57,6 +57,6 @@ VehicleReturnItemFormSet = inlineformset_factory(
     VehicleReturn,
     VehicleReturnItem,
     fields=["product", "quantity", "condition", "notes"],
-    extra=5,
+    extra=1,
     can_delete=True,
 )

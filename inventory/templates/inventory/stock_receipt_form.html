@@ -15,21 +15,12 @@
     <div class="bg-white p-6 rounded shadow max-w-2xl">
         <h2 class="font-semibold mb-4">Line Items</h2>
         <p class="text-xs text-gray-500 mb-4">
-            Leave a row blank to skip it. Each item you fill in posts a
-            RECEIPT inventory transaction and permanently records the
-            acquisition cost paid — it does not affect the product's
-            selling price.
+            Each item you fill in posts a RECEIPT inventory transaction
+            and permanently records the acquisition cost paid — it does
+            not affect the product's selling price.
         </p>
 
-        {{ formset.management_form }}
-
-        <div class="space-y-6">
-            {% for item_form in formset %}
-            <div class="border-t pt-4">
-                {{ item_form|crispy }}
-            </div>
-            {% endfor %}
-        </div>
+        {% include "partials/dynamic_formset.html" with formset=formset add_label="Line Item" %}
     </div>
 
     <div class="mt-6">
