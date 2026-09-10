@@ -5,6 +5,7 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from core.models import TimeStampedModel
+from core.utils import generate_document_number, next_sequence
 from depots.models import Depot
 from inventory.models import Product, InventoryTransaction
 from inventory.services import (
@@ -119,7 +120,8 @@ class VehicleLoad(TimeStampedModel):
 
     load_number = models.CharField(
         max_length=50,
-        unique=True
+        unique=True,
+        blank=True,
     )
 
     load_date = models.DateField(
@@ -163,6 +165,17 @@ class VehicleLoad(TimeStampedModel):
             raise ValidationError(
                 "The selected vehicle is not assigned to this salesman."
             )
+
+    def save(self, *args, **kwargs):
+        if not self.load_number:
+            self.load_number = generate_document_number(
+                prefix="LOAD",
+                depot_code=self.depot.code,
+                sequence=next_sequence(VehicleLoad, "load_number"),
+            )
+
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def close_load(self):
         """
@@ -404,7 +417,8 @@ class VehicleReturn(TimeStampedModel):
 
     return_number = models.CharField(
         max_length=50,
-        unique=True
+        unique=True,
+        blank=True,
     )
 
     return_date = models.DateField(
@@ -438,6 +452,17 @@ class VehicleReturn(TimeStampedModel):
             raise ValidationError(
                 "The vehicle load is already closed."
             )
+
+    def save(self, *args, **kwargs):
+        if not self.return_number:
+            self.return_number = generate_document_number(
+                prefix="RET",
+                depot_code=self.vehicle_load.depot.code,
+                sequence=next_sequence(VehicleReturn, "return_number"),
+            )
+
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def confirm_return(self):
         """

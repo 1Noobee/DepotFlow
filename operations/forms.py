@@ -20,9 +20,13 @@ class VehicleSalesmanForm(forms.ModelForm):
 
 
 class VehicleLoadForm(forms.ModelForm):
+    """
+    load_number is excluded — auto-generated in VehicleLoad.save().
+    """
+
     class Meta:
         model = VehicleLoad
-        fields = ["salesman", "vehicle", "depot", "load_number", "load_date", "notes"]
+        fields = ["salesman", "vehicle", "depot", "load_date", "notes"]
 
 
 VehicleLoadItemFormSet = inlineformset_factory(
@@ -41,11 +45,13 @@ class VehicleReturnForm(forms.ModelForm):
     not picked in the form. It's set here in __init__ (not in the
     view after the fact) so VehicleReturn.clean() can safely access
     self.vehicle_load during validation.
+
+    return_number is excluded too — auto-generated in VehicleReturn.save().
     """
 
     class Meta:
         model = VehicleReturn
-        fields = ["return_number", "return_date", "notes"]
+        fields = ["return_date", "notes"]
 
     def __init__(self, *args, vehicle_load=None, **kwargs):
         super().__init__(*args, **kwargs)

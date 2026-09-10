@@ -377,7 +377,7 @@ class StockReceipt(TimeStampedModel):
 
     invoice_number = models.CharField(max_length=50)
 
-    receipt_date = models.DateField()
+    receipt_date = models.DateField(default=timezone.now)
 
     total_amount = models.DecimalField(
         max_digits=14,

@@ -207,7 +207,7 @@ class Expense(LedgerPostedRecord):
         related_name="expenses"
     )
 
-    expense_date = models.DateField()
+    expense_date = models.DateField(default=timezone.now)
 
     description = models.TextField()
 
@@ -289,7 +289,7 @@ class SupplierPayment(LedgerPostedRecord):
         blank=True
     )
 
-    payment_date = models.DateField()
+    payment_date = models.DateField(default=timezone.now)
 
     amount = models.DecimalField(
         max_digits=14,
@@ -356,7 +356,7 @@ class SupplierRebate(LedgerPostedRecord):
         related_name="rebates"
     )
 
-    rebate_date = models.DateField()
+    rebate_date = models.DateField(default=timezone.now)
 
     amount = models.DecimalField(
         max_digits=14,

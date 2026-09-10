@@ -53,7 +53,7 @@ class VehicleLoadSerializer(serializers.ModelSerializer):
             "id", "salesman", "vehicle", "depot", "load_number", "load_date",
             "is_closed", "closed_at", "notes", "items",
         ]
-        read_only_fields = ["is_closed", "closed_at"]
+        read_only_fields = ["is_closed", "closed_at", "load_number"]
 
 
 class VehicleReturnItemSerializer(serializers.ModelSerializer):
@@ -71,4 +71,4 @@ class VehicleReturnSerializer(serializers.ModelSerializer):
             "id", "vehicle_load", "return_number", "return_date", "notes",
             "is_confirmed", "confirmed_at", "items",
         ]
-        read_only_fields = ["is_confirmed", "confirmed_at"]
+        read_only_fields = ["is_confirmed", "confirmed_at", "return_number"]
