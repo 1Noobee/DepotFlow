@@ -26,6 +26,7 @@ window.DepotFlow.initProductChoice = function (selectEl) {
 
     new Choices(selectEl, {
         searchEnabled: true,
+        searchResultLimit: -1,
         searchPlaceholderValue: "Search products…",
         itemSelectText: "",
         shouldSort: false,
@@ -40,3 +41,4 @@ document.addEventListener('DOMContentLoaded', function () {
         .querySelectorAll('select[name$="-product"], select[name="product"], select[name="products"]')
         .forEach(window.DepotFlow.initProductChoice);
 });
+
