@@ -10,6 +10,7 @@ is handled in the broader views/permissions pass, not here.
 """
 
 from datetime import date as date_cls
+from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
@@ -124,6 +125,39 @@ def business_ledger_summary_report(request):
     return JsonResponse(
         services.get_business_ledger_summary(depot, territory, date_from, date_to)
     )
+
+
+@login_required
+def stock_view(request):
+    """
+    Human-facing "what's actually in stock right now" page — the
+    HTML counterpart to current_inventory_report's JSON, with a
+    depot switcher instead of requiring a depot_id in the URL.
+
+    Open to any authenticated user (matches every other list view in
+    the app): defaults to the user's own depot if they have one,
+    otherwise the first depot alphabetically.
+    """
+
+    depots = Depot.objects.order_by("name")
+    depot_id = request.GET.get("depot")
+
+    if depot_id:
+        depot = get_object_or_404(Depot, pk=depot_id)
+    elif request.user.depot_id:
+        depot = request.user.depot
+    else:
+        depot = depots.first()
+
+    report = services.get_current_inventory_report(depot) if depot else None
+    total_value = sum((row["inventory_value"] for row in report["products"]), Decimal("0.00")) if report else Decimal("0.00")
+
+    return render(request, "reports/stock_view.html", {
+        "depots": depots,
+        "depot": depot,
+        "report": report,
+        "total_value": total_value,
+    })
 
 
 @login_required

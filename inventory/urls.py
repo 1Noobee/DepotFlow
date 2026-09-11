@@ -4,6 +4,8 @@ from . import views
 app_name = "inventory"
 
 urlpatterns = [
+    path("stock-balance/", views.stock_balance_lookup, name="stock_balance_lookup"),
+
     path("", views.product_list, name="product_list"),
     path("products/new/", views.product_create, name="product_create"),
     path("products/<int:pk>/", views.product_detail, name="product_detail"),

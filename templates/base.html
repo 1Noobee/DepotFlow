@@ -38,6 +38,7 @@
     <script defer src="https://cdn.jsdelivr.net/npm/choices.js@11.1.0/public/assets/scripts/choices.min.js"></script>
     <script defer src="{% static 'core/js/product_choices.js' %}"></script>
     <script defer src="{% static 'core/js/dynamic_formset.js' %}"></script>
+    <script defer src="{% static 'core/js/stock_hint.js' %}"></script>
 
     <style type="text/tailwindcss">
         @layer base {
@@ -140,6 +141,7 @@
                             <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
                         </button>
                         <div x-show="inventory" x-cloak x-transition.opacity.duration.100ms class="dropdown-panel">
+                            <a href="{% url 'reports:stock_view' %}" class="dropdown-link">Stock View</a>
                             <a href="{% url 'inventory:product_list' %}" class="dropdown-link">Products</a>
                             <a href="{% url 'inventory:supplier_list' %}" class="dropdown-link">Suppliers</a>
                             <a href="{% url 'inventory:stock_receipt_list' %}" class="dropdown-link">Stock Receipts</a>
@@ -247,6 +249,7 @@
 
             {% if nav_show_inventory %}
             <p class="mobile-section-label">Inventory</p>
+            <a href="{% url 'reports:stock_view' %}" class="mobile-link">Stock View</a>
             <a href="{% url 'inventory:product_list' %}" class="mobile-link">Products</a>
             <a href="{% url 'inventory:supplier_list' %}" class="mobile-link">Suppliers</a>
             <a href="{% url 'inventory:stock_receipt_list' %}" class="mobile-link">Stock Receipts</a>

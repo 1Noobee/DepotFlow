@@ -1,7 +1,9 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 
+from depots.models import Depot
 from .models import Product, Supplier, StockReceipt, Promotion
 from .forms import (
     ProductForm, PriceChangeForm, SupplierForm,
@@ -9,6 +11,7 @@ from .forms import (
 )
 from .services import (
     get_current_selling_price, get_current_cost_reference, record_price_change,
+    get_stock_balance,
 )
 
 
@@ -31,6 +34,30 @@ def _can_manage_pricing(user):
     """
 
     return user.is_staff or getattr(user, "role", "") in ("SUPER_ADMIN", "DEPOT_MANAGER")
+
+
+# =========================
+# STOCK LOOKUP (AJAX)
+# =========================
+@login_required
+def stock_balance_lookup(request):
+    """
+    Small JSON endpoint backing the "available stock" hint shown
+    next to the product field when adding vehicle load items — not
+    a page of its own, just data for that one bit of UI.
+    """
+
+    product_id = request.GET.get("product")
+    depot_id = request.GET.get("depot")
+
+    if not product_id or not depot_id:
+        return JsonResponse({"error": "product and depot query params are required"}, status=400)
+
+    product = get_object_or_404(Product, pk=product_id)
+    depot = get_object_or_404(Depot, pk=depot_id)
+    balance = get_stock_balance(depot, product)
+
+    return JsonResponse({"product_id": product.id, "depot_id": depot.id, "stock_balance": balance})
 
 
 # =========================

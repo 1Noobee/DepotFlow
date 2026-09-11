@@ -9,6 +9,9 @@
                 Remove
             </button>
             {{ formset.empty_form|crispy }}
+            {% if show_stock_hint %}
+            <p class="text-xs text-stone-500 mt-1" data-stock-hint-text></p>
+            {% endif %}
         </div>
     </template>
 
@@ -20,6 +23,9 @@
                 Remove
             </button>
             {{ item_form|crispy }}
+            {% if show_stock_hint %}
+            <p class="text-xs text-stone-500 mt-1" data-stock-hint-text></p>
+            {% endif %}
         </div>
         {% endfor %}
     </div>
