@@ -36,16 +36,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
         function bindRemove(card) {
             var removeButton = card.querySelector('[data-formset-remove]');
-            if (!removeButton) {
-                return;
+            if (removeButton) {
+                removeButton.addEventListener('click', function () {
+                    var deleteInput = card.querySelector('input[type="checkbox"][name$="-DELETE"]');
+                    if (deleteInput) {
+                        deleteInput.checked = true;
+                    }
+                    card.classList.add('hidden');
+                });
             }
-            removeButton.addEventListener('click', function () {
-                var deleteInput = card.querySelector('input[type="checkbox"][name$="-DELETE"]');
-                if (deleteInput) {
-                    deleteInput.checked = true;
-                }
-                card.classList.add('hidden');
-            });
+
+            var productSelect = card.querySelector('select[name$="-product"]');
+            if (productSelect && window.DepotFlow && window.DepotFlow.initProductChoice) {
+                window.DepotFlow.initProductChoice(productSelect);
+            }
         }
 
         Array.prototype.forEach.call(body.children, bindRemove);

@@ -10,6 +10,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@11.1.0/public/assets/styles/choices.min.css">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -33,6 +35,8 @@
         };
     </script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/choices.js@11.1.0/public/assets/scripts/choices.min.js"></script>
+    <script defer src="{% static 'core/js/product_choices.js' %}"></script>
     <script defer src="{% static 'core/js/dynamic_formset.js' %}"></script>
 
     <style type="text/tailwindcss">
@@ -65,6 +69,32 @@
             .mobile-link {
                 @apply block px-4 py-2 text-sm text-stone-100/90 hover:bg-white/10 hover:text-white;
             }
+        }
+    </style>
+
+    <style>
+        /* Choices.js ships its own stylesheet (not Tailwind utilities) —
+           these few overrides just line it up with the site palette. */
+        .choices__inner {
+            background-color: #fff;
+            border-color: #E7E5E4;
+            border-radius: 0.375rem;
+            min-height: 2.5rem;
+            padding: 0.375rem 0.75rem;
+        }
+        .choices.is-focused .choices__inner,
+        .choices.is-open .choices__inner {
+            border-color: #12433F;
+            box-shadow: 0 0 0 1px #12433F;
+        }
+        .choices__list--dropdown .choices__item--selectable.is-highlighted,
+        .choices__list[aria-expanded] .choices__item--selectable.is-highlighted {
+            background-color: #F6F4EF;
+            color: #1C1F1E;
+        }
+        .choices__list--multiple .choices__item {
+            background-color: #12433F;
+            border-color: #12433F;
         }
     </style>
 </head>
