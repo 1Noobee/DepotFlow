@@ -2,11 +2,14 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
+from django.utils import timezone
 
-from .models import Vehicle, VehicleSalesman, VehicleLoad, VehicleReturn
+from reports.services import get_salesman_target_progress
+
+from .models import Vehicle, VehicleSalesman, VehicleLoad, VehicleReturn, SalesTarget
 from .forms import (
     VehicleForm, VehicleSalesmanForm, VehicleLoadForm, VehicleLoadItemFormSet,
-    VehicleReturnForm, VehicleReturnItemFormSet,
+    VehicleReturnForm, VehicleReturnItemFormSet, SalesTargetForm,
 )
 
 
@@ -19,6 +22,15 @@ def _can_manage_operations(user):
     return user.is_staff or getattr(user, "role", "") in (
         "SUPER_ADMIN", "DEPOT_MANAGER", "DEPOT_OFFICER",
     )
+
+
+def _can_set_targets(user):
+    """
+    Setting a salesman's target is stricter than general operations
+    management — only Depot Manager and Super Admin.
+    """
+
+    return user.is_staff or getattr(user, "role", "") in ("SUPER_ADMIN", "DEPOT_MANAGER")
 
 
 # =========================
@@ -136,6 +148,8 @@ def load_detail(request, pk):
         "load": load,
         "items": items,
         "returns": returns,
+        "reconciliation": load.reconciliation_status() if not load.is_closed else None,
+        "is_overdue": (not load.is_closed) and load.load_date < timezone.now().date(),
         "can_manage": _can_manage_operations(request.user),
     })
 
@@ -261,3 +275,86 @@ def return_confirm(request, pk):
             messages.error(request, str(exc))
 
     return redirect("operations:return_detail", pk=pk)
+
+
+# =========================
+# MY LOADS (SALESMAN SELF-SERVICE)
+# =========================
+@login_required
+def my_loads(request):
+    """
+    A logged-in salesman's own loads and current-month target
+    progress. Needs request.user.salesman_profile — the link created
+    alongside a VehicleSalesman in VehicleSalesmanForm — so an
+    account with no linked salesman record just sees a message
+    explaining that, rather than an error.
+    """
+
+    salesman = getattr(request.user, "salesman_profile", None)
+
+    if salesman is None:
+        return render(request, "operations/my_loads.html", {"salesman": None})
+
+    today = timezone.now().date()
+
+    loads = salesman.vehicle_loads.select_related("depot", "vehicle").order_by("-load_date")
+    target_progress = get_salesman_target_progress(salesman, today.year, today.month)
+
+    return render(request, "operations/my_loads.html", {
+        "salesman": salesman,
+        "loads": loads,
+        "target_progress": target_progress,
+    })
+
+
+# =========================
+# SALES TARGETS
+# =========================
+@login_required
+def target_list(request):
+    targets = SalesTarget.objects.select_related("salesman", "salesman__depot").order_by(
+        "-year", "-month", "salesman__name"
+    )
+
+    return render(request, "operations/target_list.html", {
+        "targets": targets,
+        "can_set_targets": _can_set_targets(request.user),
+    })
+
+
+@login_required
+def target_create(request):
+    if not _can_set_targets(request.user):
+        messages.error(request, "You do not have permission to set sales targets.")
+        return redirect("operations:target_list")
+
+    if request.method == "POST":
+        form = SalesTargetForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Sales target set.")
+            return redirect("operations:target_list")
+    else:
+        form = SalesTargetForm()
+
+    return render(request, "operations/target_form.html", {"form": form, "title": "Set Sales Target"})
+
+
+@login_required
+def target_update(request, pk):
+    target = get_object_or_404(SalesTarget, pk=pk)
+
+    if not _can_set_targets(request.user):
+        messages.error(request, "You do not have permission to edit sales targets.")
+        return redirect("operations:target_list")
+
+    if request.method == "POST":
+        form = SalesTargetForm(request.POST, instance=target)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Sales target updated.")
+            return redirect("operations:target_list")
+    else:
+        form = SalesTargetForm(instance=target)
+
+    return render(request, "operations/target_form.html", {"form": form, "title": "Edit Sales Target"})

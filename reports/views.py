@@ -166,7 +166,11 @@ def dashboard(request):
     Role-specific KPI landing page (spec section 22).
 
     - Depot Manager / Depot Officer: today's figures for their own
-      depot (units sold, revenue, expenses, net position).
+      depot (units sold, revenue, expenses, net position), plus this
+      month's target progress for every salesman at that depot.
+    - Salesman: their own current-month target progress and open
+      loads — needs request.user.salesman_profile, the link created
+      alongside a VehicleSalesman in operations.forms.VehicleSalesmanForm.
     - Territory Manager: month-to-date net-profit ranking across
       every depot in their territory.
     - Super Admin: the same ranking, one table per territory,
@@ -178,11 +182,8 @@ def dashboard(request):
     Manager KPIs stay "today" since that's what the spec asks for
     there specifically.
 
-    Salesman/Finance Officer/Viewer get no KPI cards yet: there's no
-    link from a User account to a VehicleSalesman record, so a
-    personalized salesman dashboard isn't possible without a schema
-    change; Finance Officer/Viewer dashboards weren't specified.
-    They still see the existing hub of links below.
+    Finance Officer/Viewer get no KPI cards yet — not specified. They
+    still see the existing hub of links below.
     """
 
     user = request.user
@@ -195,8 +196,24 @@ def dashboard(request):
         if user.depot_id:
             context["depot_today"] = services.get_daily_sales_report(user.depot, today)
             context["depot_net_profit"] = services.get_net_profit_report(user.depot, today, today)
+            context["salesmen_progress"] = [
+                services.get_salesman_target_progress(salesman, today.year, today.month)
+                for salesman in VehicleSalesman.objects.filter(
+                    depot=user.depot, is_active=True
+                ).order_by("name")
+            ]
         else:
             context["no_depot_assigned"] = True
+
+    elif user.is_salesman:
+        salesman = getattr(user, "salesman_profile", None)
+        if salesman is not None:
+            context["my_target_progress"] = services.get_salesman_target_progress(
+                salesman, today.year, today.month
+            )
+            context["my_open_loads"] = salesman.vehicle_loads.filter(is_closed=False).order_by("-load_date")
+        else:
+            context["no_salesman_profile"] = True
 
     elif user.is_territory_manager:
         if user.territory_id:

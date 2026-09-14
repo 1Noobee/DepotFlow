@@ -23,7 +23,7 @@ from inventory.services import (
     get_current_acquisition_cost,
     get_current_selling_price,
 )
-from operations.models import VehicleLoad, get_expected_profit_for_load
+from operations.models import VehicleLoad, get_expected_profit_for_load, SalesTarget
 from finance.models import Expense, BusinessLedger
 from sales.models import Sale, SaleItem
 
@@ -342,6 +342,50 @@ def get_salesman_load_return_report(salesman, date_from=None, date_to=None):
         })
 
     return {"salesman": salesman.name, "loads": rows}
+
+
+def get_salesman_target_progress(salesman, year, month):
+    """
+    A salesman's target vs. actual for one calendar month: how many
+    units they were expected to sell (SalesTarget.target_quantity,
+    plus its derived daily/weekly figures), how many finalized sale
+    units have actually posted so far, and the remaining balance.
+
+    balance = target_quantity - sold_quantity. It shrinks as more
+    sales are finalized and grows if the target itself is raised —
+    always computed live from SalesTarget/SaleItem rather than
+    stored, so it can never drift out of sync with either one.
+
+    Returns has_target=False (with everything else zeroed out) if no
+    SalesTarget has been set for this salesman/year/month yet, so
+    callers can distinguish "no target set" from "target of 0".
+    """
+
+    try:
+        target = SalesTarget.objects.get(salesman=salesman, year=year, month=month)
+    except SalesTarget.DoesNotExist:
+        target = None
+
+    sold_quantity = SaleItem.objects.filter(
+        sale__vehicle_load__salesman=salesman,
+        sale__is_finalized=True,
+        sale__sale_date__year=year,
+        sale__sale_date__month=month,
+    ).aggregate(total=Sum("quantity"))["total"] or 0
+
+    target_quantity = target.target_quantity if target else 0
+
+    return {
+        "salesman": salesman.name,
+        "year": year,
+        "month": month,
+        "has_target": target is not None,
+        "target_quantity": target_quantity,
+        "daily_target": target.daily_target if target else 0,
+        "weekly_target": target.weekly_target if target else 0,
+        "sold_quantity": sold_quantity,
+        "balance": target_quantity - sold_quantity,
+    }
 
 
 # =========================

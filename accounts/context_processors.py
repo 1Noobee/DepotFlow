@@ -40,6 +40,17 @@ def nav_visibility(request):
     show_finance_expenses_only = (not show_finance_full) and role == "DEPOT_OFFICER"
     show_finance_ledger_only = (not show_finance_full) and role == "TERRITORY_MANAGER"
 
+    # "My Loads" is a personal page, not a management one — shown
+    # only to the Salesman role itself, regardless of show_sales
+    # above (which is about managing Sales/Customers, a different
+    # permission entirely).
+    show_my_loads = role == "SALESMAN"
+
+    # Setting targets is stricter than general operations management
+    # (mirrors operations.views._can_set_targets), but the Targets
+    # *list* is visible to anyone who can see Operations at all.
+    show_targets = show_operations
+
     return {
         "nav_show_depots": show_depots,
         "nav_show_inventory": show_inventory,
@@ -49,6 +60,8 @@ def nav_visibility(request):
         "nav_show_finance_expenses_only": show_finance_expenses_only,
         "nav_show_finance_ledger_only": show_finance_ledger_only,
         "nav_show_any_finance": show_finance_full or show_finance_expenses_only or show_finance_ledger_only,
+        "nav_show_my_loads": show_my_loads,
+        "nav_show_targets": show_targets,
         # A role that sees every operational section gets the full
         # numbered workflow on the home page; everyone else gets a
         # shorter, role-tailored set of quick links instead.

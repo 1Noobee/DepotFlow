@@ -31,7 +31,7 @@
     </div>
 
     <h2 class="font-semibold text-lg mb-3">Today's Sales by Product</h2>
-    <div class="bg-white rounded shadow divide-y">
+    <div class="bg-white rounded shadow divide-y mb-8">
         {% for row in depot_today.by_product %}
         <div class="px-4 py-3 flex items-center justify-between text-sm">
             <span>{{ row.product__name }} <span class="text-gray-400">({{ row.product__sku }})</span></span>
@@ -41,6 +41,75 @@
         <div class="px-4 py-6 text-gray-500 text-sm">No sales finalized yet today.</div>
         {% endfor %}
     </div>
+
+    <h2 class="font-semibold text-lg mb-3">Salesmen — {{ month_start|date:"F" }} Target Progress</h2>
+    <div class="bg-white rounded shadow divide-y">
+        {% for row in salesmen_progress %}
+        <div class="px-4 py-3 flex items-center justify-between text-sm">
+            <span class="font-medium">{{ row.salesman }}</span>
+            {% if row.has_target %}
+            <span class="text-gray-600">
+                {{ row.sold_quantity }} / {{ row.target_quantity }} units
+                <span class="ml-2 {% if row.balance > 0 %}text-depot-brick{% else %}text-depot-moss{% endif %}">
+                    {% if row.balance > 0 %}{{ row.balance }} short{% else %}target met{% endif %}
+                </span>
+            </span>
+            {% else %}
+            <span class="text-gray-400">No target set</span>
+            {% endif %}
+        </div>
+        {% empty %}
+        <div class="px-4 py-6 text-gray-500 text-sm">No active salesmen at this depot.</div>
+        {% endfor %}
+    </div>
+
+{% elif my_target_progress or no_salesman_profile %}
+    {# Salesman: their own current-month target progress and open loads #}
+    {% if no_salesman_profile %}
+    <div class="bg-white p-6 rounded shadow text-sm text-gray-600">
+        Your account isn't linked to a salesman profile yet, so there's no personal target to
+        show. Ask a Depot Manager or Super Admin to link your login from the Salesmen page.
+    </div>
+    {% else %}
+    <p class="text-sm text-gray-500 mb-4">{{ month_start|date:"F Y" }}</p>
+
+    {% if my_target_progress.has_target %}
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+        <div class="bg-white p-5 rounded shadow">
+            <p class="text-sm text-gray-500">Monthly Target</p>
+            <p class="text-2xl font-semibold">{{ my_target_progress.target_quantity }}</p>
+        </div>
+        <div class="bg-white p-5 rounded shadow">
+            <p class="text-sm text-gray-500">Sold So Far</p>
+            <p class="text-2xl font-semibold">{{ my_target_progress.sold_quantity }}</p>
+        </div>
+        <div class="bg-white p-5 rounded shadow">
+            <p class="text-sm text-gray-500">Daily / Weekly Target</p>
+            <p class="text-2xl font-semibold">{{ my_target_progress.daily_target|floatformat:1 }} / {{ my_target_progress.weekly_target|floatformat:1 }}</p>
+        </div>
+        <div class="bg-white p-5 rounded shadow">
+            <p class="text-sm text-gray-500">Balance</p>
+            <p class="text-2xl font-semibold {% if my_target_progress.balance > 0 %}text-depot-brick{% else %}text-depot-moss{% endif %}">
+                {% if my_target_progress.balance > 0 %}{{ my_target_progress.balance }} to go{% else %}Met{% endif %}
+            </p>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-white p-5 rounded shadow text-sm text-gray-500 mb-8">No target has been set for you this month yet.</div>
+    {% endif %}
+
+    <h2 class="font-semibold text-lg mb-3">My Open Loads</h2>
+    <div class="bg-white rounded shadow divide-y">
+        {% for load in my_open_loads %}
+        <div class="px-4 py-3 flex items-center justify-between text-sm">
+            <a href="{% url 'operations:load_detail' load.pk %}" class="font-medium hover:underline">{{ load.load_number }}</a>
+            <span class="text-gray-500">{{ load.depot.name }} &middot; {{ load.load_date }}</span>
+        </div>
+        {% empty %}
+        <div class="px-4 py-6 text-gray-500 text-sm">No open loads right now.</div>
+        {% endfor %}
+    </div>
+    {% endif %}
 
 {% elif no_depot_assigned %}
     <div class="bg-white p-6 rounded shadow text-sm text-gray-600">

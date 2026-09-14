@@ -12,6 +12,12 @@ urlpatterns = [
     path("salesmen/new/", views.salesman_create, name="salesman_create"),
     path("salesmen/<int:pk>/edit/", views.salesman_update, name="salesman_update"),
 
+    path("my-loads/", views.my_loads, name="my_loads"),
+
+    path("targets/", views.target_list, name="target_list"),
+    path("targets/new/", views.target_create, name="target_create"),
+    path("targets/<int:pk>/edit/", views.target_update, name="target_update"),
+
     path("", views.load_list, name="load_list"),
     path("loads/new/", views.load_create, name="load_create"),
     path("loads/<int:pk>/", views.load_detail, name="load_detail"),

@@ -1,5 +1,7 @@
+import calendar
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
@@ -84,6 +86,17 @@ class VehicleSalesman(TimeStampedModel):
         blank=True
     )
 
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="salesman_profile",
+        help_text="The login account this salesman uses to see their own "
+                   "loads and target — created alongside the salesman in "
+                   "operations.forms.VehicleSalesmanForm, not required.",
+    )
+
     is_active = models.BooleanField(
         default=True
     )
@@ -166,6 +179,19 @@ class VehicleLoad(TimeStampedModel):
                 "The selected vehicle is not assigned to this salesman."
             )
 
+        if self.pk is None and self.salesman_id:
+            has_open_load = VehicleLoad.objects.filter(
+                salesman_id=self.salesman_id,
+                is_closed=False,
+            ).exists()
+
+            if has_open_load:
+                raise ValidationError(
+                    f"{self.salesman.name} already has an open vehicle load. "
+                    "It must be closed (sales and any returns recorded first) "
+                    "before a new load can be created for them."
+                )
+
     def save(self, *args, **kwargs):
         if not self.load_number:
             self.load_number = generate_document_number(
@@ -177,14 +203,79 @@ class VehicleLoad(TimeStampedModel):
         self.full_clean()
         super().save(*args, **kwargs)
 
+    def reconciliation_status(self):
+        """
+        Per-product loaded/sold/returned/remaining for this load —
+        quantity sold (finalized Sales) plus quantity returned
+        (confirmed VehicleReturns) should equal what was loaded.
+        Used both by close_load() to decide whether the load can
+        close, and by the load-detail page to show the salesman or
+        manager exactly what's still outstanding before that point.
+        """
+
+        # Local import: sales.models imports VehicleLoad, so importing
+        # sales.models at module level here would be circular.
+        from sales.models import SaleItem
+
+        sold_by_product = {
+            row["product_id"]: row["total"]
+            for row in SaleItem.objects.filter(
+                sale__vehicle_load=self,
+                sale__is_finalized=True,
+            ).values("product_id").annotate(total=models.Sum("quantity"))
+        }
+
+        returned_by_product = {
+            row["product_id"]: row["total"]
+            for row in VehicleReturnItem.objects.filter(
+                vehicle_return__vehicle_load=self,
+                vehicle_return__is_confirmed=True,
+            ).values("product_id").annotate(total=models.Sum("quantity"))
+        }
+
+        rows = []
+
+        for item in self.items.select_related("product"):
+            sold = sold_by_product.get(item.product_id, 0)
+            returned = returned_by_product.get(item.product_id, 0)
+
+            rows.append({
+                "product": item.product,
+                "loaded": item.quantity,
+                "sold": sold,
+                "returned": returned,
+                "remaining": item.quantity - sold - returned,
+            })
+
+        return rows
+
     def close_load(self):
         """
         Close the load so that it can no longer be modified.
+
+        Every loaded product must be fully accounted for first (see
+        reconciliation_status()) — this is a hard rule with no
+        override: any shortfall, damage, or unsold stock must be
+        recorded as a return item or a sale before the load can be
+        closed, so closing a load always means it's genuinely fully
+        reconciled.
         """
 
         if self.is_closed:
             raise ValidationError(
                 "This vehicle load is already closed."
+            )
+
+        unaccounted = [
+            f"{row['product'].name} ({row['remaining']} unit(s) unaccounted for)"
+            for row in self.reconciliation_status()
+            if row["remaining"] != 0
+        ]
+
+        if unaccounted:
+            raise ValidationError(
+                "This load cannot be closed until every product is fully "
+                "sold or returned. Still unaccounted for: " + "; ".join(unaccounted)
             )
 
         self.is_closed = True
@@ -638,3 +729,60 @@ def get_expected_cost_for_load(vehicle_load):
         total_cost += item.expected_cost
 
     return total_cost
+
+
+class SalesTarget(TimeStampedModel):
+    """
+    A salesman's target quantity (units/cases) for one calendar
+    month. Daily/weekly targets are derived properties, not stored
+    fields, so they always stay consistent with target_quantity and
+    the real length of that month rather than needing to be kept in
+    sync by hand.
+
+    "Actual sold" and the resulting balance against this target are
+    likewise not stored here — see
+    reports.services.get_salesman_target_progress(), which computes
+    them live from finalized Sales, the same way stock balances and
+    every other rollup in this project are computed on demand rather
+    than cached in a field that could drift out of sync.
+    """
+
+    salesman = models.ForeignKey(
+        VehicleSalesman,
+        on_delete=models.CASCADE,
+        related_name="targets",
+    )
+
+    year = models.PositiveIntegerField()
+
+    month = models.PositiveSmallIntegerField(
+        choices=[(i, calendar.month_name[i]) for i in range(1, 13)],
+    )
+
+    target_quantity = models.PositiveIntegerField(
+        help_text="Total units/cases this salesman is expected to sell this month."
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["salesman", "year", "month"],
+                name="unique_sales_target_per_salesman_per_month",
+            )
+        ]
+        ordering = ["-year", "-month", "salesman__name"]
+
+    def __str__(self):
+        return f"{self.salesman.name} target {self.month}/{self.year}: {self.target_quantity}"
+
+    @property
+    def days_in_month(self):
+        return calendar.monthrange(self.year, self.month)[1]
+
+    @property
+    def daily_target(self):
+        return self.target_quantity / self.days_in_month
+
+    @property
+    def weekly_target(self):
+        return self.daily_target * 7
