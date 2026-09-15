@@ -109,6 +109,114 @@ class VehicleSalesmanForm(forms.ModelForm):
         return salesman
 
 
+class LoadCloseForm(forms.Form):
+    """
+    Captures the day's result for every product on a load in one
+    step — how many units were sold and how many were returned —
+    built fresh from VehicleLoad.reconciliation_status() so the
+    "remaining" figure always reflects what's actually still
+    outstanding right now.
+
+    Submitting this creates a single Sale (with one SaleItem per
+    product sold, customer left blank — this flow doesn't track
+    per-customer detail) and/or a single VehicleReturn (with one
+    item per product returned), then closes the load. See
+    operations.views.load_close.
+    """
+
+    def __init__(self, *args, load=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.load = load
+        self._row_meta = []
+
+        number_attrs = {"class": "w-20 rounded border border-stone-300 text-sm px-2 py-1"}
+        select_attrs = {"class": "rounded border border-stone-300 text-sm px-2 py-1"}
+
+        for row in load.reconciliation_status():
+            product = row["product"]
+            remaining = row["remaining"]
+
+            sold_name = f"sold_{product.id}"
+            returned_name = f"returned_{product.id}"
+            condition_name = f"condition_{product.id}"
+
+            self.fields[sold_name] = forms.IntegerField(
+                min_value=0, initial=max(remaining, 0),
+                widget=forms.NumberInput(attrs=number_attrs),
+            )
+            self.fields[returned_name] = forms.IntegerField(
+                min_value=0, initial=0,
+                widget=forms.NumberInput(attrs=number_attrs),
+            )
+            self.fields[condition_name] = forms.ChoiceField(
+                choices=[("GOOD", "Good"), ("DAMAGED", "Damaged")],
+                initial="GOOD", required=False,
+                widget=forms.Select(attrs=select_attrs),
+            )
+
+            self._row_meta.append({
+                "product": product,
+                "loaded": row["loaded"],
+                "remaining": remaining,
+                "sold_name": sold_name,
+                "returned_name": returned_name,
+                "condition_name": condition_name,
+            })
+
+    @property
+    def rows(self):
+        """Bound fields for template rendering, one row per product."""
+        return [
+            {
+                "product": meta["product"],
+                "loaded": meta["loaded"],
+                "remaining": meta["remaining"],
+                "sold": self[meta["sold_name"]],
+                "returned": self[meta["returned_name"]],
+                "condition": self[meta["condition_name"]],
+            }
+            for meta in self._row_meta
+        ]
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        for meta in self._row_meta:
+            sold = cleaned_data.get(meta["sold_name"])
+            returned = cleaned_data.get(meta["returned_name"])
+
+            if sold is None or returned is None:
+                continue
+
+            if sold + returned != meta["remaining"]:
+                self.add_error(
+                    meta["sold_name"],
+                    f"Sold + returned must add up to {meta['remaining']} "
+                    f"(what's still unaccounted for) — got {sold + returned}."
+                )
+
+        return cleaned_data
+
+    def get_results(self):
+        """Rows with any activity, as plain dicts — skips products left untouched (0 sold, 0 returned)."""
+        results = []
+
+        for meta in self._row_meta:
+            sold = self.cleaned_data.get(meta["sold_name"], 0)
+            returned = self.cleaned_data.get(meta["returned_name"], 0)
+            condition = self.cleaned_data.get(meta["condition_name"]) or "GOOD"
+
+            if sold or returned:
+                results.append({
+                    "product": meta["product"],
+                    "sold": sold,
+                    "returned": returned,
+                    "condition": condition,
+                })
+
+        return results
+
+
 class SalesTargetForm(forms.ModelForm):
     class Meta:
         model = SalesTarget
@@ -118,11 +226,16 @@ class SalesTargetForm(forms.ModelForm):
 class VehicleLoadForm(forms.ModelForm):
     """
     load_number is excluded — auto-generated in VehicleLoad.save().
+    load_date is excluded too — always today (the model's default),
+    never user-editable, so a load's date can't be backdated or
+    forward-dated. This is also what makes the "same-day reload"
+    rule in VehicleLoad.clean() reliable: every load a user creates
+    is dated today, full stop.
     """
 
     class Meta:
         model = VehicleLoad
-        fields = ["salesman", "vehicle", "depot", "load_date", "notes"]
+        fields = ["salesman", "vehicle", "depot", "notes"]
 
 
 VehicleLoadItemFormSet = inlineformset_factory(

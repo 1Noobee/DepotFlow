@@ -5,11 +5,12 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 
 from reports.services import get_salesman_target_progress
+from sales.models import Sale, SaleItem
 
-from .models import Vehicle, VehicleSalesman, VehicleLoad, VehicleReturn, SalesTarget
+from .models import Vehicle, VehicleSalesman, VehicleLoad, VehicleReturn, VehicleReturnItem, SalesTarget
 from .forms import (
     VehicleForm, VehicleSalesmanForm, VehicleLoadForm, VehicleLoadItemFormSet,
-    VehicleReturnForm, VehicleReturnItemFormSet, SalesTargetForm,
+    VehicleReturnForm, VehicleReturnItemFormSet, SalesTargetForm, LoadCloseForm,
 )
 
 
@@ -190,20 +191,77 @@ def load_create(request):
 
 @login_required
 def load_close(request, pk):
+    """
+    Records the day's result and closes the load in one step: for
+    every product still unaccounted for, how much was sold and how
+    much was returned. See forms.LoadCloseForm for the validation
+    (sold + returned must exactly account for what's remaining).
+
+    This is now the only way sales get recorded against a load —
+    there is deliberately no per-customer sale entry point here,
+    since day-to-day this business doesn't track sales by customer.
+    sales.views.sale_create still exists for anyone who wants to
+    attribute a sale to a specific Customer by going there directly;
+    it's just no longer linked from the load page.
+    """
+
     load = get_object_or_404(VehicleLoad, pk=pk)
 
     if not _can_manage_operations(request.user):
         messages.error(request, "You do not have permission to close vehicle loads.")
         return redirect("operations:load_detail", pk=pk)
 
-    if request.method == "POST":
-        try:
-            load.close_load()
-            messages.success(request, "Vehicle load closed.")
-        except Exception as exc:
-            messages.error(request, str(exc))
+    if load.is_closed:
+        messages.error(request, "This vehicle load is already closed.")
+        return redirect("operations:load_detail", pk=pk)
 
-    return redirect("operations:load_detail", pk=pk)
+    if request.method == "POST":
+        form = LoadCloseForm(request.POST, load=load)
+
+        if form.is_valid():
+            results = form.get_results()
+            today = timezone.now().date()
+
+            try:
+                with transaction.atomic():
+                    sold_rows = [row for row in results if row["sold"] > 0]
+                    returned_rows = [row for row in results if row["returned"] > 0]
+
+                    if sold_rows:
+                        sale = Sale(vehicle_load=load, sale_date=today)
+                        sale.save()
+
+                        for row in sold_rows:
+                            SaleItem.objects.create(
+                                sale=sale, product=row["product"], quantity=row["sold"],
+                            )
+
+                        sale.finalize()
+
+                    if returned_rows:
+                        vehicle_return = VehicleReturn(vehicle_load=load, return_date=today)
+                        vehicle_return.save()
+
+                        for row in returned_rows:
+                            VehicleReturnItem.objects.create(
+                                vehicle_return=vehicle_return,
+                                product=row["product"],
+                                quantity=row["returned"],
+                                condition=row["condition"],
+                            )
+
+                        vehicle_return.confirm_return()
+
+                    load.close_load()
+
+                messages.success(request, "Sales and returns recorded — vehicle load closed.")
+                return redirect("operations:load_detail", pk=pk)
+            except Exception as exc:
+                messages.error(request, str(exc))
+    else:
+        form = LoadCloseForm(load=load)
+
+    return render(request, "operations/load_close.html", {"load": load, "form": form})
 
 
 # =========================

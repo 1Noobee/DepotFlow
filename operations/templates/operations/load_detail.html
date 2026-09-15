@@ -5,15 +5,8 @@
     <h1 class="text-2xl font-semibold">{{ load.load_number }}</h1>
     <div class="flex items-center gap-3">
         {% if can_manage and not load.is_closed %}
-        <form method="post" action="{% url 'operations:load_close' load.pk %}">
-            {% csrf_token %}
-            <button type="submit" class="text-sm text-red-600 hover:underline">Close Load</button>
-        </form>
-        <a href="{% url 'sales:sale_create' load.pk %}" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
-            New Sale
-        </a>
-        <a href="{% url 'operations:return_create' load.pk %}" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
-            New Return
+        <a href="{% url 'operations:load_close' load.pk %}" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
+            Close Load
         </a>
         {% endif %}
     </div>

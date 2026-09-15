@@ -180,16 +180,21 @@ class VehicleLoad(TimeStampedModel):
             )
 
         if self.pk is None and self.salesman_id:
-            has_open_load = VehicleLoad.objects.filter(
+            # Same-day reloads are fine — a salesman can sell out and
+            # come back for more stock on the same day. What's not
+            # allowed is starting today's load(s) while a load from a
+            # PREVIOUS day is still open; that one must be closed
+            # (sales + any returns recorded) first.
+            stale_open_load = VehicleLoad.objects.filter(
                 salesman_id=self.salesman_id,
                 is_closed=False,
-            ).exists()
+            ).exclude(load_date=self.load_date).exists()
 
-            if has_open_load:
+            if stale_open_load:
                 raise ValidationError(
-                    f"{self.salesman.name} already has an open vehicle load. "
-                    "It must be closed (sales and any returns recorded first) "
-                    "before a new load can be created for them."
+                    f"{self.salesman.name} has an open vehicle load from a "
+                    "previous date. It must be closed (sales and any returns "
+                    "recorded) before a new load can be created for them."
                 )
 
     def save(self, *args, **kwargs):
