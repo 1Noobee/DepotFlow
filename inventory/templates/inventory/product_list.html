@@ -20,9 +20,16 @@
             <a href="{% url 'inventory:product_detail' product.pk %}" class="font-medium hover:underline">{{ product.name }}</a>
             <span class="text-sm text-gray-500 ml-2">{{ product.sku }} &middot; {{ product.category }}</span>
         </div>
-        <span class="text-sm {% if product.is_active %}text-green-700{% else %}text-gray-400{% endif %}">
-            {% if product.is_active %}Active{% else %}Inactive{% endif %}
-        </span>
+        <div class="flex items-center gap-4">
+            <span class="text-sm {% if product.is_active %}text-green-700{% else %}text-gray-400{% endif %}">
+                {% if product.is_active %}Active{% else %}Inactive{% endif %}
+            </span>
+            <form method="post" action="{% url 'inventory:product_delete' product.pk %}"
+                  onsubmit="return confirm('Delete {{ product.name|escapejs }}? This only works if it has no stock receipts, loads, sales, or returns recorded against it.');">
+                {% csrf_token %}
+                <button type="submit" class="text-sm text-depot-brick hover:underline">Delete</button>
+            </form>
+        </div>
     </div>
     {% empty %}
     <div class="px-4 py-6 text-gray-500 text-sm">No products yet.</div>

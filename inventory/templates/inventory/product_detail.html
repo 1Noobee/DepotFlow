@@ -10,6 +10,11 @@
         </a>
         {% endif %}
         <a href="{% url 'inventory:product_update' product.pk %}" class="text-sm text-slate-600 hover:underline">Edit</a>
+        <form method="post" action="{% url 'inventory:product_delete' product.pk %}"
+              onsubmit="return confirm('Delete {{ product.name|escapejs }}? This only works if it has no stock receipts, loads, sales, or returns recorded against it.');">
+            {% csrf_token %}
+            <button type="submit" class="text-sm text-depot-brick hover:underline">Delete</button>
+        </form>
     </div>
 </div>
 

@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import ProtectedError
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 
@@ -120,6 +121,42 @@ def product_update(request, pk):
         form = ProductForm(instance=product)
 
     return render(request, "inventory/product_form.html", {"form": form, "title": "Edit Product"})
+
+
+@login_required
+def product_delete(request, pk):
+    """
+    Hard-deletes a product if nothing actually references it yet.
+    Every real transactional link to Product (inventory transactions,
+    sale items, vehicle load items, vehicle return items, stock
+    receipt items) is on_delete=PROTECT, so this simply fails with a
+    clear explanation for any product that's ever actually moved —
+    at that point it's business history, not a mistake to erase, and
+    the existing is_active toggle on the edit form is the right way
+    to retire it instead.
+    """
+
+    product = get_object_or_404(Product, pk=pk)
+
+    if not _can_manage_inventory(request.user):
+        messages.error(request, "You do not have permission to delete products.")
+        return redirect("inventory:product_detail", pk=pk)
+
+    if request.method == "POST":
+        try:
+            product.delete()
+            messages.success(request, "Product deleted.")
+            return redirect("inventory:product_list")
+        except ProtectedError:
+            messages.error(
+                request,
+                f"'{product.name}' can't be deleted — it already has stock "
+                "receipts, loads, sales, or returns recorded against it, and "
+                "deleting it would break that history. Edit it and turn off "
+                "\"Is active\" instead to retire it from use."
+            )
+
+    return redirect("inventory:product_detail", pk=pk)
 
 
 @login_required
