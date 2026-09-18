@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import ProtectedError
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 
@@ -9,7 +10,7 @@ from sales.models import Sale, SaleItem
 
 from .models import Vehicle, VehicleSalesman, VehicleLoad, VehicleReturn, VehicleReturnItem, SalesTarget
 from .forms import (
-    VehicleForm, VehicleSalesmanForm, VehicleLoadForm, VehicleLoadItemFormSet,
+    VehicleForm, VehicleReassignForm, VehicleSalesmanForm, VehicleLoadForm, VehicleLoadItemFormSet,
     VehicleReturnForm, VehicleReturnItemFormSet, SalesTargetForm, LoadCloseForm,
 )
 
@@ -79,6 +80,113 @@ def vehicle_update(request, pk):
         form = VehicleForm(instance=vehicle)
 
     return render(request, "operations/vehicle_form.html", {"form": form, "title": "Edit Vehicle"})
+
+
+@login_required
+def vehicle_delete(request, pk):
+    """
+    Hard-deletes a vehicle if nothing protects it. Vehicle.loads is
+    on_delete=PROTECT — real load history can never be deleted out
+    from under it, reassignment or not. VehicleSalesman.vehicle is
+    also PROTECT but nullable, and reassigning every salesman off
+    this vehicle first genuinely clears that blocker — so that case
+    gets a proper reassignment flow instead of just a dead end.
+    """
+
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+
+    if not _can_manage_operations(request.user):
+        messages.error(request, "You do not have permission to delete vehicles.")
+        return redirect("operations:vehicle_list")
+
+    if request.method != "POST":
+        return redirect("operations:vehicle_list")
+
+    try:
+        vehicle.delete()
+        messages.success(request, "Vehicle deleted.")
+        return redirect("operations:vehicle_list")
+    except ProtectedError:
+        if vehicle.loads.exists():
+            messages.error(
+                request,
+                f"'{vehicle.registration_number}' can't be deleted — it has vehicle "
+                "loads recorded against it, and that history can't be removed even "
+                "after reassigning any salesmen. Turn off \"Is active\" instead to "
+                "retire it from use."
+            )
+            return redirect("operations:vehicle_list")
+
+        if VehicleSalesman.objects.filter(vehicle=vehicle).exists():
+            return redirect("operations:vehicle_reassign_and_delete", pk=pk)
+
+        messages.error(request, f"'{vehicle.registration_number}' can't be deleted right now.")
+        return redirect("operations:vehicle_list")
+
+
+@login_required
+def vehicle_reassign_and_delete(request, pk):
+    """
+    Reached when deleting a vehicle failed only because it's still
+    assigned to one or more salesmen. Pick a replacement (existing or
+    brand new) for each of them, and this reassigns everyone, then
+    deletes the original vehicle in one step.
+    """
+
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+
+    if not _can_manage_operations(request.user):
+        messages.error(request, "You do not have permission to delete vehicles.")
+        return redirect("operations:vehicle_list")
+
+    if vehicle.loads.exists():
+        messages.error(
+            request,
+            f"'{vehicle.registration_number}' has vehicle loads recorded against "
+            "it and can't be deleted, even after reassigning salesmen."
+        )
+        return redirect("operations:vehicle_list")
+
+    assigned_salesmen = VehicleSalesman.objects.filter(vehicle=vehicle)
+
+    if not assigned_salesmen.exists():
+        # Nothing left to reassign (e.g. someone else already moved
+        # them) — the plain delete should just work now.
+        return redirect("operations:vehicle_delete", pk=pk)
+
+    if request.method == "POST":
+        form = VehicleReassignForm(request.POST, vehicle=vehicle)
+
+        if form.is_valid():
+            assigned_count = assigned_salesmen.count()
+
+            with transaction.atomic():
+                for assignment in form.get_assignments():
+                    salesman = assignment["salesman"]
+
+                    if assignment["vehicle"] is not None:
+                        replacement = assignment["vehicle"]
+                    else:
+                        replacement = Vehicle.objects.create(**assignment["new_vehicle_data"])
+
+                    salesman.vehicle = replacement
+                    salesman.save(update_fields=["vehicle", "updated_at"])
+
+                vehicle.delete()
+
+            messages.success(
+                request,
+                f"Reassigned {assigned_count} salesman/salesmen and deleted "
+                f"'{vehicle.registration_number}'."
+            )
+            return redirect("operations:vehicle_list")
+    else:
+        form = VehicleReassignForm(vehicle=vehicle)
+
+    return render(request, "operations/vehicle_reassign_and_delete.html", {
+        "vehicle": vehicle,
+        "form": form,
+    })
 
 
 # =========================

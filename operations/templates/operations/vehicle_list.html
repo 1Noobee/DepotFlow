@@ -24,6 +24,11 @@
                 {% if vehicle.is_active %}Active{% else %}Inactive{% endif %}
             </span>
             <a href="{% url 'operations:vehicle_update' vehicle.pk %}" class="text-sm text-slate-600 hover:underline">Edit</a>
+            <form method="post" action="{% url 'operations:vehicle_delete' vehicle.pk %}"
+                  onsubmit="return confirm('Delete {{ vehicle.registration_number|escapejs }}? If it\'s still assigned to a salesman, you\'ll be asked to reassign them first.');">
+                {% csrf_token %}
+                <button type="submit" class="text-sm text-depot-brick hover:underline">Delete</button>
+            </form>
         </div>
     </div>
     {% empty %}

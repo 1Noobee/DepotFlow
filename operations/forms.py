@@ -18,6 +18,125 @@ class VehicleForm(forms.ModelForm):
         fields = ["depot", "registration_number", "vehicle_name", "capacity", "is_active"]
 
 
+class VehicleReassignForm(forms.Form):
+    """
+    Shown when deleting a vehicle that's still assigned to one or
+    more salesmen (and has no load history of its own, which would
+    block deletion outright regardless). One row per affected
+    salesman — each picks either an existing other vehicle or fills
+    in a new one, mirroring VehicleSalesmanForm's inline-creation
+    pattern. Submitting reassigns every salesman, then deletes the
+    original vehicle.
+    """
+
+    def __init__(self, *args, vehicle=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.vehicle = vehicle
+        self._row_meta = []
+
+        select_attrs = {"class": "w-full rounded border border-stone-300 text-sm px-2 py-1.5"}
+        text_attrs = {"class": "w-full rounded border border-stone-300 text-sm px-2 py-1.5"}
+        number_attrs = {"class": "w-24 rounded border border-stone-300 text-sm px-2 py-1.5"}
+
+        other_vehicles = Vehicle.objects.exclude(pk=vehicle.pk).order_by("registration_number")
+
+        for salesman in VehicleSalesman.objects.filter(vehicle=vehicle).order_by("name"):
+            existing_name = f"existing_vehicle_{salesman.id}"
+            new_reg_name = f"new_registration_{salesman.id}"
+            new_label_name = f"new_name_{salesman.id}"
+            new_capacity_name = f"new_capacity_{salesman.id}"
+
+            self.fields[existing_name] = forms.ModelChoiceField(
+                queryset=other_vehicles, required=False, label="Existing vehicle",
+                empty_label="— choose an existing vehicle —",
+                widget=forms.Select(attrs=select_attrs),
+            )
+            self.fields[new_reg_name] = forms.CharField(
+                max_length=30, required=False, label="Or new registration number",
+                widget=forms.TextInput(attrs={**text_attrs, "placeholder": "Registration no."}),
+            )
+            self.fields[new_label_name] = forms.CharField(
+                max_length=100, required=False, label="New vehicle name",
+                widget=forms.TextInput(attrs={**text_attrs, "placeholder": "Vehicle name"}),
+            )
+            self.fields[new_capacity_name] = forms.IntegerField(
+                required=False, min_value=0, label="New vehicle capacity",
+                widget=forms.NumberInput(attrs={**number_attrs, "placeholder": "Capacity"}),
+            )
+
+            self._row_meta.append({
+                "salesman": salesman,
+                "existing_name": existing_name,
+                "new_reg_name": new_reg_name,
+                "new_label_name": new_label_name,
+                "new_capacity_name": new_capacity_name,
+            })
+
+    @property
+    def rows(self):
+        return [
+            {
+                "salesman": meta["salesman"],
+                "existing": self[meta["existing_name"]],
+                "new_registration": self[meta["new_reg_name"]],
+                "new_name": self[meta["new_label_name"]],
+                "new_capacity": self[meta["new_capacity_name"]],
+            }
+            for meta in self._row_meta
+        ]
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        for meta in self._row_meta:
+            existing = cleaned_data.get(meta["existing_name"])
+            new_reg = cleaned_data.get(meta["new_reg_name"])
+
+            if existing and new_reg:
+                self.add_error(
+                    meta["existing_name"],
+                    "Choose either an existing vehicle or fill in a new one, not both.",
+                )
+            elif not existing and not new_reg:
+                self.add_error(
+                    meta["existing_name"],
+                    "Pick an existing vehicle, or fill in a new registration number, for this salesman.",
+                )
+            elif new_reg and Vehicle.objects.filter(registration_number=new_reg).exists():
+                self.add_error(meta["new_reg_name"], "This registration number is already in use.")
+
+        return cleaned_data
+
+    def get_assignments(self):
+        """
+        One dict per affected salesman: either {"salesman", "vehicle"}
+        for an existing pick, or {"salesman", "new_vehicle_data"} for
+        a brand-new vehicle to create (same depot as the one being
+        deleted).
+        """
+
+        results = []
+
+        for meta in self._row_meta:
+            existing = self.cleaned_data.get(meta["existing_name"])
+
+            if existing:
+                results.append({"salesman": meta["salesman"], "vehicle": existing, "new_vehicle_data": None})
+            else:
+                results.append({
+                    "salesman": meta["salesman"],
+                    "vehicle": None,
+                    "new_vehicle_data": {
+                        "depot": self.vehicle.depot,
+                        "registration_number": self.cleaned_data.get(meta["new_reg_name"]),
+                        "vehicle_name": self.cleaned_data.get(meta["new_label_name"]) or "",
+                        "capacity": self.cleaned_data.get(meta["new_capacity_name"]) or 0,
+                    },
+                })
+
+        return results
+
+
 class VehicleSalesmanForm(forms.ModelForm):
     """
     Also creates the salesman's login account in the same step —

@@ -109,6 +109,53 @@ def get_daily_sales_report(depot, report_date):
     }
 
 
+def get_sales_summary_for_range(depot, date_from, date_to):
+    """
+    Same shape as get_daily_sales_report, but for an arbitrary date
+    range instead of a single day — powers the dashboard's timeframe
+    picker (Today, This Week, Month to Date, or a custom range all
+    call this one function; get_daily_sales_report is left exactly
+    as-is rather than rewritten on top of this, since its JSON report
+    endpoint's output shape is an existing external contract).
+    """
+
+    items = _with_revenue_cost(SaleItem.objects.filter(
+        sale__vehicle_load__depot=depot,
+        sale__is_finalized=True,
+    ))
+    items = _date_range_filter(items, "sale__sale_date", date_from, date_to)
+
+    totals = items.aggregate(
+        total_quantity=Sum("quantity"),
+        total_revenue=Sum("revenue"),
+        total_cost=Sum("cost"),
+    )
+
+    by_product = (
+        items.values("product__sku", "product__name")
+        .annotate(
+            quantity=Sum("quantity"),
+            revenue=Sum("revenue"),
+            cost=Sum("cost"),
+        )
+        .order_by("-revenue")
+    )
+
+    total_revenue = totals["total_revenue"] or Decimal("0.00")
+    total_cost = totals["total_cost"] or Decimal("0.00")
+
+    return {
+        "depot": depot.name,
+        "date_from": date_from,
+        "date_to": date_to,
+        "total_quantity": totals["total_quantity"] or 0,
+        "total_revenue": total_revenue,
+        "total_cost": total_cost,
+        "total_profit": total_revenue - total_cost,
+        "by_product": list(by_product),
+    }
+
+
 def get_daily_stock_movement_report(depot, report_date):
     """
     Every inventory transaction posted at a depot on a single day,

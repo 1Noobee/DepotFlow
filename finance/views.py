@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 
+from depots.models import Depot
 from .models import BusinessLedger, Expense, SupplierPayment, SupplierRebate
 from .forms import ExpenseForm, SupplierPaymentForm, SupplierRebateForm, ReversalForm
 
@@ -222,9 +223,41 @@ def supplier_rebate_reverse(request, pk):
 # =========================
 @login_required
 def ledger_list(request):
+    """
+    Business Ledger, one depot at a time — mixing every depot's
+    entries into a single list made it hard to actually read, so
+    this mirrors reports.stock_view's depot-switcher pattern instead.
+
+    Territory Managers only see depots within their own territory in
+    the switcher (matches reports.stock_view's scoping for the same
+    role); everyone else can pick from every depot, consistent with
+    every other list view in the app being read-open regardless of
+    role — only mutations are permission-gated.
+    """
+
+    user = request.user
+
+    if user.is_territory_manager and user.territory_id:
+        depots = Depot.objects.filter(territory=user.territory).order_by("name")
+    else:
+        depots = Depot.objects.order_by("name")
+
+    depot_id = request.GET.get("depot")
+
+    if depot_id:
+        depot = get_object_or_404(Depot, pk=depot_id)
+    elif user.depot_id:
+        depot = user.depot
+    else:
+        depot = depots.first()
+
     ledger_entries = (
-        BusinessLedger.objects
-        .select_related("depot")
-        .order_by("-transaction_date", "-created_at")[:200]
+        BusinessLedger.objects.filter(depot=depot).order_by("-transaction_date", "-created_at")[:200]
+        if depot else []
     )
-    return render(request, "finance/ledger_list.html", {"ledger_entries": ledger_entries})
+
+    return render(request, "finance/ledger_list.html", {
+        "depots": depots,
+        "depot": depot,
+        "ledger_entries": ledger_entries,
+    })

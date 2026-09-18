@@ -140,6 +140,13 @@
                     </div>
                     {% endif %}
 
+                    {% if nav_show_stock_view_standalone %}
+                    <a href="{% url 'reports:stock_view' %}"
+                       class="nav-link {% if request.resolver_match.url_name == 'stock_view' %}nav-link-active{% endif %}">
+                        Stock View
+                    </a>
+                    {% endif %}
+
                     {% if nav_show_inventory %}
                     <div class="relative" @click.outside="inventory = false">
                         <button type="button" @click="inventory = !inventory" :aria-expanded="inventory"
@@ -259,6 +266,10 @@
             <p class="mobile-section-label">Depots</p>
             <a href="{% url 'depots:depot_list' %}" class="mobile-link">Depots</a>
             <a href="{% url 'depots:territory_list' %}" class="mobile-link">Territories</a>
+            {% endif %}
+
+            {% if nav_show_stock_view_standalone %}
+            <a href="{% url 'reports:stock_view' %}" class="mobile-link">Stock View</a>
             {% endif %}
 
             {% if nav_show_inventory %}

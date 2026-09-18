@@ -9,7 +9,7 @@ scoping (e.g. a Territory Manager only seeing their own territory)
 is handled in the broader views/permissions pass, not here.
 """
 
-from datetime import date as date_cls
+from datetime import date as date_cls, timedelta
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
@@ -136,16 +136,25 @@ def stock_view(request):
 
     Open to any authenticated user (matches every other list view in
     the app): defaults to the user's own depot if they have one,
-    otherwise the first depot alphabetically.
+    otherwise the first depot alphabetically. Territory Managers only
+    see depots within their own territory in the switcher — they
+    don't operate depots directly, but do need to check stock across
+    every depot they oversee.
     """
 
-    depots = Depot.objects.order_by("name")
+    user = request.user
+
+    if user.is_territory_manager and user.territory_id:
+        depots = Depot.objects.filter(territory=user.territory).order_by("name")
+    else:
+        depots = Depot.objects.order_by("name")
+
     depot_id = request.GET.get("depot")
 
     if depot_id:
         depot = get_object_or_404(Depot, pk=depot_id)
-    elif request.user.depot_id:
-        depot = request.user.depot
+    elif user.depot_id:
+        depot = user.depot
     else:
         depot = depots.first()
 
@@ -165,22 +174,28 @@ def dashboard(request):
     """
     Role-specific KPI landing page (spec section 22).
 
-    - Depot Manager / Depot Officer: today's figures for their own
-      depot (units sold, revenue, expenses, net position), plus this
-      month's target progress for every salesman at that depot.
+    - Depot Manager / Depot Officer: figures for their own depot
+      (units sold, revenue, expenses, net position) over a chosen
+      timeframe — defaults to today, plus this month's target
+      progress for every salesman at that depot (target periods are
+      always calendar-monthly, so that part doesn't move with the
+      timeframe picker).
     - Salesman: their own current-month target progress and open
       loads — needs request.user.salesman_profile, the link created
       alongside a VehicleSalesman in operations.forms.VehicleSalesmanForm.
-    - Territory Manager: month-to-date net-profit ranking across
-      every depot in their territory.
-    - Super Admin: the same ranking, one table per territory,
-      across the whole business.
+    - Territory Manager: net-profit ranking across every depot in
+      their territory, over a chosen timeframe — defaults to
+      month-to-date.
+    - Super Admin: the same ranking, one table per territory, across
+      the whole business — same default.
 
-    A single day of net profit ranks depots almost arbitrarily (a
-    depot with zero activity today just sits at the bottom), so the
-    ranking views use month-to-date instead of "today" — the Depot
-    Manager KPIs stay "today" since that's what the spec asks for
-    there specifically.
+    Every timeframe above is overridable via ?date_from=&date_to= —
+    see templates/partials/date_range_form.html, included with quick
+    links for Today/This Week/Month to Date plus a manual range. A
+    single day of net profit ranks depots almost arbitrarily (a depot
+    with zero activity today just sits at the bottom), which is why
+    the ranking views default to month-to-date rather than today —
+    they can still be pointed at a single day if that's ever useful.
 
     Finance Officer/Viewer get no KPI cards yet — not specified. They
     still see the existing hub of links below.
@@ -189,13 +204,26 @@ def dashboard(request):
     user = request.user
     today = date_cls.today()
     month_start = today.replace(day=1)
+    week_start = today - timedelta(days=today.weekday())
 
-    context = {"today": today, "month_start": month_start}
+    date_from_param = _parse_date(request.GET.get("date_from"))
+    date_to_param = _parse_date(request.GET.get("date_to"))
+
+    context = {
+        "today": today,
+        "month_start": month_start,
+        "week_start": week_start,
+    }
 
     if user.is_depot_manager or user.is_depot_officer:
+        date_from = date_from_param or today
+        date_to = date_to_param or today
+        context["date_from"] = date_from
+        context["date_to"] = date_to
+
         if user.depot_id:
-            context["depot_today"] = services.get_daily_sales_report(user.depot, today)
-            context["depot_net_profit"] = services.get_net_profit_report(user.depot, today, today)
+            context["depot_sales"] = services.get_sales_summary_for_range(user.depot, date_from, date_to)
+            context["depot_net_profit"] = services.get_net_profit_report(user.depot, date_from, date_to)
             context["salesmen_progress"] = [
                 services.get_salesman_target_progress(salesman, today.year, today.month)
                 for salesman in VehicleSalesman.objects.filter(
@@ -216,16 +244,26 @@ def dashboard(request):
             context["no_salesman_profile"] = True
 
     elif user.is_territory_manager:
+        date_from = date_from_param or month_start
+        date_to = date_to_param or today
+        context["date_from"] = date_from
+        context["date_to"] = date_to
+
         if user.territory_id:
             context["territory_comparison"] = services.get_territory_depot_comparison(
-                user.territory, month_start, today
+                user.territory, date_from, date_to
             )
         else:
             context["no_territory_assigned"] = True
 
     elif user.is_super_admin:
+        date_from = date_from_param or month_start
+        date_to = date_to_param or today
+        context["date_from"] = date_from
+        context["date_to"] = date_to
+
         context["all_territory_comparisons"] = [
-            services.get_territory_depot_comparison(territory, month_start, today)
+            services.get_territory_depot_comparison(territory, date_from, date_to)
             for territory in Territory.objects.all().order_by("name")
         ]
 

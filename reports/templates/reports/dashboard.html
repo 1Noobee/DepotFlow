@@ -4,25 +4,26 @@
 {% block content %}
 <h1 class="text-2xl font-semibold mb-6">Dashboard</h1>
 
-{% if depot_today %}
-    {# Depot Manager / Depot Officer: today's figures for their own depot #}
-    <p class="text-sm text-gray-500 mb-4">{{ request.user.depot.name }} &middot; {{ today }}</p>
+{% if depot_sales %}
+    {# Depot Manager / Depot Officer: figures for their own depot over a chosen timeframe #}
+    <p class="text-sm text-gray-500 mb-1">{{ request.user.depot.name }}</p>
+    {% include "partials/date_range_form.html" %}
 
     <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
         <div class="bg-white p-5 rounded shadow">
-            <p class="text-sm text-gray-500">Units Sold Today</p>
-            <p class="text-2xl font-semibold">{{ depot_today.total_quantity }}</p>
+            <p class="text-sm text-gray-500">Units Sold</p>
+            <p class="text-2xl font-semibold">{{ depot_sales.total_quantity }}</p>
         </div>
         <div class="bg-white p-5 rounded shadow">
-            <p class="text-sm text-gray-500">Revenue Today</p>
+            <p class="text-sm text-gray-500">Revenue</p>
             <p class="text-2xl font-semibold">&#8358;{{ depot_net_profit.revenue }}</p>
         </div>
         <div class="bg-white p-5 rounded shadow">
-            <p class="text-sm text-gray-500">Expenses Today</p>
+            <p class="text-sm text-gray-500">Expenses</p>
             <p class="text-2xl font-semibold">&#8358;{{ depot_net_profit.total_expenses }}</p>
         </div>
         <div class="bg-white p-5 rounded shadow">
-            <p class="text-sm text-gray-500">Net Position Today</p>
+            <p class="text-sm text-gray-500">Net Position</p>
             <p class="text-2xl font-semibold
                 {% if depot_net_profit.net_profit < 0 %}text-red-600{% else %}text-green-700{% endif %}">
                 &#8358;{{ depot_net_profit.net_profit }}
@@ -30,15 +31,15 @@
         </div>
     </div>
 
-    <h2 class="font-semibold text-lg mb-3">Today's Sales by Product</h2>
+    <h2 class="font-semibold text-lg mb-3">Sales by Product ({{ date_from }} to {{ date_to }})</h2>
     <div class="bg-white rounded shadow divide-y mb-8">
-        {% for row in depot_today.by_product %}
+        {% for row in depot_sales.by_product %}
         <div class="px-4 py-3 flex items-center justify-between text-sm">
             <span>{{ row.product__name }} <span class="text-gray-400">({{ row.product__sku }})</span></span>
             <span class="text-gray-600">{{ row.quantity }} units &middot; &#8358;{{ row.revenue }}</span>
         </div>
         {% empty %}
-        <div class="px-4 py-6 text-gray-500 text-sm">No sales finalized yet today.</div>
+        <div class="px-4 py-6 text-gray-500 text-sm">No sales finalized in this period.</div>
         {% endfor %}
     </div>
 
@@ -118,12 +119,11 @@
     </div>
 
 {% elif territory_comparison %}
-    {# Territory Manager: month-to-date depot ranking within their territory #}
-    <p class="text-sm text-gray-500 mb-4">
-        {{ territory_comparison.territory }} &middot; {{ month_start }} to {{ today }}
-    </p>
+    {# Territory Manager: depot ranking within their territory over a chosen timeframe #}
+    <p class="text-sm text-gray-500 mb-1">{{ territory_comparison.territory }}</p>
+    {% include "partials/date_range_form.html" %}
 
-    <h2 class="font-semibold text-lg mb-3">Depot Ranking (Net Profit, Month to Date)</h2>
+    <h2 class="font-semibold text-lg mb-3">Depot Ranking (Net Profit, {{ date_from }} to {{ date_to }})</h2>
     <div class="bg-white rounded shadow divide-y">
         {% for row in territory_comparison.depots %}
         <div class="px-4 py-3 flex items-center justify-between text-sm">
@@ -147,8 +147,9 @@
     </div>
 
 {% elif all_territory_comparisons %}
-    {# Super Admin: same ranking, one table per territory, business-wide #}
-    <p class="text-sm text-gray-500 mb-6">{{ month_start }} to {{ today }} &middot; all territories</p>
+    {# Super Admin: same ranking, one table per territory, business-wide, over a chosen timeframe #}
+    {% include "partials/date_range_form.html" %}
+    <p class="text-sm text-gray-500 mb-6">{{ date_from }} to {{ date_to }} &middot; all territories</p>
 
     {% for comparison in all_territory_comparisons %}
     <h2 class="font-semibold text-lg mb-3">{{ comparison.territory }}</h2>

@@ -51,6 +51,12 @@ def nav_visibility(request):
     # *list* is visible to anyone who can see Operations at all.
     show_targets = show_operations
 
+    # Territory Manager doesn't get the full Inventory dropdown (they
+    # don't run day-to-day receiving/pricing), but they do need to
+    # check stock across every depot they oversee — so Stock View
+    # gets its own flag rather than riding on show_inventory.
+    show_stock_view_standalone = (not show_inventory) and role == "TERRITORY_MANAGER"
+
     return {
         "nav_show_depots": show_depots,
         "nav_show_inventory": show_inventory,
@@ -62,6 +68,7 @@ def nav_visibility(request):
         "nav_show_any_finance": show_finance_full or show_finance_expenses_only or show_finance_ledger_only,
         "nav_show_my_loads": show_my_loads,
         "nav_show_targets": show_targets,
+        "nav_show_stock_view_standalone": show_stock_view_standalone,
         # A role that sees every operational section gets the full
         # numbered workflow on the home page; everyone else gets a
         # shorter, role-tailored set of quick links instead.
