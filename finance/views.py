@@ -224,30 +224,37 @@ def supplier_rebate_reverse(request, pk):
 @login_required
 def ledger_list(request):
     """
-    Business Ledger, one depot at a time — mixing every depot's
-    entries into a single list made it hard to actually read, so
-    this mirrors reports.stock_view's depot-switcher pattern instead.
+    Business Ledger, scoped for depot confidentiality — this is a
+    deliberate exception to the rest of the app's "reads are open to
+    anyone" convention, since ledger entries are real financial
+    detail for a specific depot:
 
-    Territory Managers only see depots within their own territory in
-    the switcher (matches reports.stock_view's scoping for the same
-    role); everyone else can pick from every depot, consistent with
-    every other list view in the app being read-open regardless of
-    role — only mutations are permission-gated.
+    - Super Admin (or staff): every depot, switchable.
+    - Territory Manager: every depot in their own territory, switchable.
+    - Everyone else (Depot Manager, Depot Officer, Finance Officer,
+      Salesman, Viewer): only their own assigned depot — no switcher,
+      and a ?depot= query param from anyone outside the two groups
+      above is ignored rather than honored, so this can't be bypassed
+      by editing the URL. No depot on the account means no ledger to
+      show at all, rather than falling back to "all of them".
     """
 
     user = request.user
+    can_switch = user.is_staff or user.is_super_admin or (user.is_territory_manager and user.territory_id)
 
-    if user.is_territory_manager and user.territory_id:
-        depots = Depot.objects.filter(territory=user.territory).order_by("name")
-    else:
+    if user.is_staff or user.is_super_admin:
         depots = Depot.objects.order_by("name")
+    elif user.is_territory_manager and user.territory_id:
+        depots = Depot.objects.filter(territory=user.territory).order_by("name")
+    elif user.depot_id:
+        depots = Depot.objects.filter(pk=user.depot_id)
+    else:
+        depots = Depot.objects.none()
 
     depot_id = request.GET.get("depot")
 
-    if depot_id:
-        depot = get_object_or_404(Depot, pk=depot_id)
-    elif user.depot_id:
-        depot = user.depot
+    if depot_id and can_switch:
+        depot = get_object_or_404(depots, pk=depot_id)
     else:
         depot = depots.first()
 
@@ -259,5 +266,6 @@ def ledger_list(request):
     return render(request, "finance/ledger_list.html", {
         "depots": depots,
         "depot": depot,
+        "can_switch": can_switch,
         "ledger_entries": ledger_entries,
     })

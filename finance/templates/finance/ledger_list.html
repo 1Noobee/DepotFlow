@@ -4,7 +4,7 @@
 <div class="flex flex-wrap items-end justify-between gap-4 mb-2">
     <h1 class="text-2xl font-semibold">Business Ledger</h1>
 
-    {% if depots|length > 1 %}
+    {% if can_switch and depots|length > 1 %}
     <form method="get" class="flex items-center gap-2">
         <label for="id_ledger_depot" class="text-sm text-stone-500">Depot</label>
         <select id="id_ledger_depot" name="depot" onchange="this.form.submit()"
@@ -18,7 +18,10 @@
 </div>
 
 {% if not depot %}
-<p class="text-sm text-gray-600 mb-6">No depots exist yet.</p>
+<div class="bg-white border border-stone-200 rounded-lg p-6 text-sm text-gray-600">
+    No depot is assigned to your account, so there's no ledger to show here. Contact a
+    Super Admin or your Territory Manager if you need access to a depot's ledger.
+</div>
 {% else %}
 <p class="text-sm text-gray-600 mb-6">
     {{ depot.name }} &middot; most recent 200 entries. Read-only — corrections happen via reversal on the source record.
