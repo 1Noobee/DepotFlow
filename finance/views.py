@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 
-from depots.models import Depot
+from core.scoping import get_visible_depots, user_can_access_depot, is_unrestricted
 from .models import BusinessLedger, Expense, SupplierPayment, SupplierRebate
 from .forms import ExpenseForm, SupplierPaymentForm, SupplierRebateForm, ReversalForm
 
@@ -36,7 +36,9 @@ def _can_approve_finance(user):
 # =========================
 @login_required
 def expense_list(request):
-    expenses = Expense.objects.select_related("depot", "category").order_by("-expense_date")
+    expenses = Expense.objects.filter(
+        depot__in=get_visible_depots(request.user)
+    ).select_related("depot", "category").order_by("-expense_date")
     return render(request, "finance/expense_list.html", {
         "expenses": expenses,
         "can_approve": _can_approve_finance(request.user),
@@ -50,13 +52,13 @@ def expense_create(request):
         return redirect("finance:expense_list")
 
     if request.method == "POST":
-        form = ExpenseForm(request.POST)
+        form = ExpenseForm(request.POST, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Expense recorded.")
             return redirect("finance:expense_list")
     else:
-        form = ExpenseForm()
+        form = ExpenseForm(user=request.user)
 
     return render(request, "finance/expense_form.html", {"form": form, "title": "New Expense"})
 
@@ -67,6 +69,10 @@ def expense_approve(request, pk):
 
     if not _can_approve_finance(request.user):
         messages.error(request, "You do not have permission to approve expenses.")
+        return redirect("finance:expense_list")
+
+    if not user_can_access_depot(request.user, expense.depot):
+        messages.error(request, "You do not have access to that expense.")
         return redirect("finance:expense_list")
 
     if request.method == "POST":
@@ -83,6 +89,10 @@ def expense_reverse(request, pk):
 
     if not _can_approve_finance(request.user):
         messages.error(request, "You do not have permission to reverse expenses.")
+        return redirect("finance:expense_list")
+
+    if not user_can_access_depot(request.user, expense.depot):
+        messages.error(request, "You do not have access to that expense.")
         return redirect("finance:expense_list")
 
     if request.method == "POST":
@@ -109,7 +119,9 @@ def expense_reverse(request, pk):
 # =========================
 @login_required
 def supplier_payment_list(request):
-    payments = SupplierPayment.objects.select_related("depot", "supplier").order_by("-payment_date")
+    payments = SupplierPayment.objects.filter(
+        depot__in=get_visible_depots(request.user)
+    ).select_related("depot", "supplier").order_by("-payment_date")
     return render(request, "finance/supplier_payment_list.html", {
         "payments": payments,
         "can_approve": _can_approve_finance(request.user),
@@ -123,13 +135,13 @@ def supplier_payment_create(request):
         return redirect("finance:supplier_payment_list")
 
     if request.method == "POST":
-        form = SupplierPaymentForm(request.POST)
+        form = SupplierPaymentForm(request.POST, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Supplier payment recorded.")
             return redirect("finance:supplier_payment_list")
     else:
-        form = SupplierPaymentForm()
+        form = SupplierPaymentForm(user=request.user)
 
     return render(request, "finance/supplier_payment_form.html", {"form": form, "title": "New Supplier Payment"})
 
@@ -140,6 +152,10 @@ def supplier_payment_reverse(request, pk):
 
     if not _can_approve_finance(request.user):
         messages.error(request, "You do not have permission to reverse supplier payments.")
+        return redirect("finance:supplier_payment_list")
+
+    if not user_can_access_depot(request.user, payment.depot):
+        messages.error(request, "You do not have access to that supplier payment.")
         return redirect("finance:supplier_payment_list")
 
     if request.method == "POST":
@@ -166,7 +182,9 @@ def supplier_payment_reverse(request, pk):
 # =========================
 @login_required
 def supplier_rebate_list(request):
-    rebates = SupplierRebate.objects.select_related("depot", "supplier").order_by("-rebate_date")
+    rebates = SupplierRebate.objects.filter(
+        depot__in=get_visible_depots(request.user)
+    ).select_related("depot", "supplier").order_by("-rebate_date")
     return render(request, "finance/supplier_rebate_list.html", {
         "rebates": rebates,
         "can_approve": _can_approve_finance(request.user),
@@ -180,13 +198,13 @@ def supplier_rebate_create(request):
         return redirect("finance:supplier_rebate_list")
 
     if request.method == "POST":
-        form = SupplierRebateForm(request.POST)
+        form = SupplierRebateForm(request.POST, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Supplier rebate recorded.")
             return redirect("finance:supplier_rebate_list")
     else:
-        form = SupplierRebateForm()
+        form = SupplierRebateForm(user=request.user)
 
     return render(request, "finance/supplier_rebate_form.html", {"form": form, "title": "New Supplier Rebate"})
 
@@ -197,6 +215,10 @@ def supplier_rebate_reverse(request, pk):
 
     if not _can_approve_finance(request.user):
         messages.error(request, "You do not have permission to reverse supplier rebates.")
+        return redirect("finance:supplier_rebate_list")
+
+    if not user_can_access_depot(request.user, rebate.depot):
+        messages.error(request, "You do not have access to that supplier rebate.")
         return redirect("finance:supplier_rebate_list")
 
     if request.method == "POST":
@@ -240,16 +262,8 @@ def ledger_list(request):
     """
 
     user = request.user
-    can_switch = user.is_staff or user.is_super_admin or (user.is_territory_manager and user.territory_id)
-
-    if user.is_staff or user.is_super_admin:
-        depots = Depot.objects.order_by("name")
-    elif user.is_territory_manager and user.territory_id:
-        depots = Depot.objects.filter(territory=user.territory).order_by("name")
-    elif user.depot_id:
-        depots = Depot.objects.filter(pk=user.depot_id)
-    else:
-        depots = Depot.objects.none()
+    can_switch = is_unrestricted(user) or (user.is_territory_manager and user.territory_id)
+    depots = get_visible_depots(user).order_by("name")
 
     depot_id = request.GET.get("depot")
 

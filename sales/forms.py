@@ -1,6 +1,7 @@
 from django import forms
 from django.forms import inlineformset_factory
 
+from core.scoping import get_visible_depots
 from .models import Customer, Sale, SaleItem
 
 
@@ -8,6 +9,11 @@ class CustomerForm(forms.ModelForm):
     class Meta:
         model = Customer
         fields = ["name", "outlet_type", "depot", "phone", "address", "is_active"]
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user is not None:
+            self.fields["depot"].queryset = get_visible_depots(user)
 
 
 class SaleForm(forms.ModelForm):

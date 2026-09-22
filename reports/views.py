@@ -19,6 +19,7 @@ from django.views.decorators.http import require_GET
 
 from depots.models import Depot, Territory
 from operations.models import VehicleSalesman
+from core.scoping import get_visible_depots, user_can_access_depot, user_can_access_territory, is_unrestricted
 from . import services
 
 
@@ -28,10 +29,31 @@ def _parse_date(value):
     return date_cls.fromisoformat(value)
 
 
+def _get_accessible_depot_or_403(request, depot_id):
+    """
+    Shared by every depot_id-based JSON report endpoint below: fetch
+    the depot, and refuse (403) if this user isn't allowed to see
+    it — a filtered list view doesn't stop someone from requesting a
+    specific depot_id directly, so every one of these needs the same
+    object-level check core.scoping.user_can_access_depot() provides.
+    Returns (depot, None) on success, or (None, error_response) to
+    return directly from the calling view.
+    """
+
+    depot = get_object_or_404(Depot, pk=depot_id)
+
+    if not user_can_access_depot(request.user, depot):
+        return None, JsonResponse({"error": "You do not have access to that depot."}, status=403)
+
+    return depot, None
+
+
 @login_required
 @require_GET
 def daily_sales_report(request, depot_id):
-    depot = get_object_or_404(Depot, pk=depot_id)
+    depot, error = _get_accessible_depot_or_403(request, depot_id)
+    if error:
+        return error
     report_date = _parse_date(request.GET.get("date")) or date_cls.today()
     return JsonResponse(services.get_daily_sales_report(depot, report_date))
 
@@ -39,7 +61,9 @@ def daily_sales_report(request, depot_id):
 @login_required
 @require_GET
 def daily_stock_movement_report(request, depot_id):
-    depot = get_object_or_404(Depot, pk=depot_id)
+    depot, error = _get_accessible_depot_or_403(request, depot_id)
+    if error:
+        return error
     report_date = _parse_date(request.GET.get("date")) or date_cls.today()
     return JsonResponse(services.get_daily_stock_movement_report(depot, report_date))
 
@@ -47,14 +71,18 @@ def daily_stock_movement_report(request, depot_id):
 @login_required
 @require_GET
 def current_inventory_report(request, depot_id):
-    depot = get_object_or_404(Depot, pk=depot_id)
+    depot, error = _get_accessible_depot_or_403(request, depot_id)
+    if error:
+        return error
     return JsonResponse(services.get_current_inventory_report(depot))
 
 
 @login_required
 @require_GET
 def expense_report(request, depot_id):
-    depot = get_object_or_404(Depot, pk=depot_id)
+    depot, error = _get_accessible_depot_or_403(request, depot_id)
+    if error:
+        return error
     date_from = _parse_date(request.GET.get("date_from"))
     date_to = _parse_date(request.GET.get("date_to"))
     return JsonResponse(services.get_expense_report(depot, date_from, date_to))
@@ -63,7 +91,9 @@ def expense_report(request, depot_id):
 @login_required
 @require_GET
 def net_profit_report(request, depot_id):
-    depot = get_object_or_404(Depot, pk=depot_id)
+    depot, error = _get_accessible_depot_or_403(request, depot_id)
+    if error:
+        return error
     date_from = _parse_date(request.GET.get("date_from"))
     date_to = _parse_date(request.GET.get("date_to"))
     return JsonResponse(services.get_net_profit_report(depot, date_from, date_to))
@@ -72,7 +102,9 @@ def net_profit_report(request, depot_id):
 @login_required
 @require_GET
 def top_selling_skus_report(request, depot_id):
-    depot = get_object_or_404(Depot, pk=depot_id)
+    depot, error = _get_accessible_depot_or_403(request, depot_id)
+    if error:
+        return error
     date_from = _parse_date(request.GET.get("date_from"))
     date_to = _parse_date(request.GET.get("date_to"))
     limit = int(request.GET.get("limit", 10))
@@ -84,7 +116,9 @@ def top_selling_skus_report(request, depot_id):
 @login_required
 @require_GET
 def slow_moving_skus_report(request, depot_id):
-    depot = get_object_or_404(Depot, pk=depot_id)
+    depot, error = _get_accessible_depot_or_403(request, depot_id)
+    if error:
+        return error
     date_from = _parse_date(request.GET.get("date_from"))
     date_to = _parse_date(request.GET.get("date_to"))
     limit = int(request.GET.get("limit", 10))
@@ -97,6 +131,10 @@ def slow_moving_skus_report(request, depot_id):
 @require_GET
 def salesman_load_return_report(request, salesman_id):
     salesman = get_object_or_404(VehicleSalesman, pk=salesman_id)
+
+    if not user_can_access_depot(request.user, salesman.depot):
+        return JsonResponse({"error": "You do not have access to that salesman."}, status=403)
+
     date_from = _parse_date(request.GET.get("date_from"))
     date_to = _parse_date(request.GET.get("date_to"))
     return JsonResponse(services.get_salesman_load_return_report(salesman, date_from, date_to))
@@ -106,6 +144,10 @@ def salesman_load_return_report(request, salesman_id):
 @require_GET
 def territory_comparison_report(request, territory_id):
     territory = get_object_or_404(Territory, pk=territory_id)
+
+    if not user_can_access_territory(request.user, territory):
+        return JsonResponse({"error": "You do not have access to that territory."}, status=403)
+
     date_from = _parse_date(request.GET.get("date_from"))
     date_to = _parse_date(request.GET.get("date_to"))
     return JsonResponse(services.get_territory_depot_comparison(territory, date_from, date_to))
@@ -119,8 +161,26 @@ def business_ledger_summary_report(request):
     date_from = _parse_date(request.GET.get("date_from"))
     date_to = _parse_date(request.GET.get("date_to"))
 
-    depot = get_object_or_404(Depot, pk=depot_id) if depot_id else None
-    territory = get_object_or_404(Territory, pk=territory_id) if territory_id else None
+    depot = None
+    territory = None
+
+    if depot_id:
+        depot = get_object_or_404(Depot, pk=depot_id)
+        if not user_can_access_depot(request.user, depot):
+            return JsonResponse({"error": "You do not have access to that depot."}, status=403)
+    elif territory_id:
+        territory = get_object_or_404(Territory, pk=territory_id)
+        if not user_can_access_territory(request.user, territory):
+            return JsonResponse({"error": "You do not have access to that territory."}, status=403)
+    elif not is_unrestricted(request.user):
+        # Neither param given, and this user isn't unrestricted —
+        # default to their own depot rather than falling back to
+        # every depot, which get_business_ledger_summary() would
+        # otherwise return for depot=None, territory=None.
+        if request.user.depot_id:
+            depot = request.user.depot
+        else:
+            return JsonResponse({"error": "No depot is assigned to your account."}, status=403)
 
     return JsonResponse(
         services.get_business_ledger_summary(depot, territory, date_from, date_to)
@@ -134,25 +194,20 @@ def stock_view(request):
     HTML counterpart to current_inventory_report's JSON, with a
     depot switcher instead of requiring a depot_id in the URL.
 
-    Open to any authenticated user (matches every other list view in
-    the app): defaults to the user's own depot if they have one,
-    otherwise the first depot alphabetically. Territory Managers only
-    see depots within their own territory in the switcher — they
-    don't operate depots directly, but do need to check stock across
-    every depot they oversee.
+    Scoped the same way as everywhere else via core.scoping: Super
+    Admin sees every depot, Territory Manager sees every depot in
+    their own territory, everyone else only their own single depot.
+    A ?depot= query param outside what get_visible_depots() allows
+    is rejected (404), not silently honored — this can't be bypassed
+    by editing the URL.
     """
 
     user = request.user
-
-    if user.is_territory_manager and user.territory_id:
-        depots = Depot.objects.filter(territory=user.territory).order_by("name")
-    else:
-        depots = Depot.objects.order_by("name")
-
+    depots = get_visible_depots(user).order_by("name")
     depot_id = request.GET.get("depot")
 
     if depot_id:
-        depot = get_object_or_404(Depot, pk=depot_id)
+        depot = get_object_or_404(depots, pk=depot_id)
     elif user.depot_id:
         depot = user.depot
     else:

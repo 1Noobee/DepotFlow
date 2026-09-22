@@ -1,5 +1,6 @@
 from django import forms
 
+from core.scoping import get_visible_depots
 from .models import Expense, SupplierPayment, SupplierRebate
 
 
@@ -14,17 +15,32 @@ class ExpenseForm(forms.ModelForm):
         model = Expense
         fields = ["depot", "category", "expense_date", "description", "amount", "payment_method"]
 
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user is not None:
+            self.fields["depot"].queryset = get_visible_depots(user)
+
 
 class SupplierPaymentForm(forms.ModelForm):
     class Meta:
         model = SupplierPayment
         fields = ["depot", "supplier", "stock_receipt", "payment_date", "amount", "notes"]
 
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user is not None:
+            self.fields["depot"].queryset = get_visible_depots(user)
+
 
 class SupplierRebateForm(forms.ModelForm):
     class Meta:
         model = SupplierRebate
         fields = ["depot", "supplier", "rebate_date", "amount", "description"]
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user is not None:
+            self.fields["depot"].queryset = get_visible_depots(user)
 
 
 class ReversalForm(forms.Form):

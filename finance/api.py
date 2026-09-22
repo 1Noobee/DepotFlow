@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.permissions import role_permission
+from core.scoping import get_visible_depots
 from .models import ExpenseCategory, BusinessLedger, Expense, SupplierPayment, SupplierRebate
 from .serializers import (
     ExpenseCategorySerializer, BusinessLedgerSerializer,
@@ -30,9 +31,21 @@ class ExpenseCategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class BusinessLedgerViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = BusinessLedger.objects.select_related("depot").order_by("-transaction_date", "-created_at")
+    """
+    Scoped the same way as finance.views.ledger_list: Super Admin
+    sees every depot, Territory Manager sees their own territory,
+    everyone else only their own depot — a deliberate exception to
+    most other read-only viewsets here, since ledger entries are
+    real financial detail for a specific depot.
+    """
+
     serializer_class = BusinessLedgerSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return BusinessLedger.objects.filter(
+            depot__in=get_visible_depots(self.request.user)
+        ).select_related("depot").order_by("-transaction_date", "-created_at")
 
 
 class ExpenseViewSet(viewsets.ModelViewSet):
@@ -44,10 +57,14 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     generic edit or delete page for Expense.
     """
 
-    queryset = Expense.objects.select_related("depot", "category").order_by("-expense_date", "-created_at")
     serializer_class = ExpenseSerializer
     permission_classes = [role_permission(*_RECORD_EXPENSE_ROLES)]
     http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self):
+        return Expense.objects.filter(
+            depot__in=get_visible_depots(self.request.user)
+        ).select_related("depot", "category").order_by("-expense_date", "-created_at")
 
     @action(detail=True, methods=["post"], permission_classes=[role_permission(*_APPROVE_FINANCE_ROLES)])
     def approve(self, request, pk=None):
@@ -68,14 +85,17 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 class SupplierPaymentViewSet(viewsets.ModelViewSet):
     """No PUT/PATCH/DELETE — see ExpenseViewSet docstring; reverse() is the only correction path."""
 
-    queryset = (
-        SupplierPayment.objects
-        .select_related("depot", "supplier", "stock_receipt")
-        .order_by("-payment_date", "-created_at")
-    )
     serializer_class = SupplierPaymentSerializer
     permission_classes = [role_permission(*_APPROVE_FINANCE_ROLES)]
     http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self):
+        return (
+            SupplierPayment.objects
+            .filter(depot__in=get_visible_depots(self.request.user))
+            .select_related("depot", "supplier", "stock_receipt")
+            .order_by("-payment_date", "-created_at")
+        )
 
     @action(detail=True, methods=["post"])
     def reverse(self, request, pk=None):
@@ -89,10 +109,14 @@ class SupplierPaymentViewSet(viewsets.ModelViewSet):
 class SupplierRebateViewSet(viewsets.ModelViewSet):
     """No PUT/PATCH/DELETE — see ExpenseViewSet docstring; reverse() is the only correction path."""
 
-    queryset = SupplierRebate.objects.select_related("depot", "supplier").order_by("-rebate_date", "-created_at")
     serializer_class = SupplierRebateSerializer
     permission_classes = [role_permission(*_APPROVE_FINANCE_ROLES)]
     http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self):
+        return SupplierRebate.objects.filter(
+            depot__in=get_visible_depots(self.request.user)
+        ).select_related("depot", "supplier").order_by("-rebate_date", "-created_at")
 
     @action(detail=True, methods=["post"])
     def reverse(self, request, pk=None):

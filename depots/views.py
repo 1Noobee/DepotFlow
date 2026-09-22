@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 
+from core.scoping import get_visible_depots, get_visible_territories, user_can_access_depot
 from .models import Territory, Depot
 from .forms import TerritoryForm, DepotForm
 
@@ -9,7 +10,8 @@ from .forms import TerritoryForm, DepotForm
 def _can_manage_depots(user):
     """
     Only staff or SUPER_ADMIN-role users can create/edit territories
-    and depots; every authenticated user can view them.
+    and depots; everyone else can view whatever core.scoping says
+    is visible to them.
     """
 
     return user.is_staff or getattr(user, "role", "") == "SUPER_ADMIN"
@@ -17,7 +19,7 @@ def _can_manage_depots(user):
 
 @login_required
 def territory_list(request):
-    territories = Territory.objects.all().order_by("name")
+    territories = get_visible_territories(request.user).order_by("name")
     return render(request, "depots/territory_list.html", {"territories": territories})
 
 
@@ -61,13 +63,18 @@ def territory_update(request, pk):
 
 @login_required
 def depot_list(request):
-    depots = Depot.objects.select_related("territory").order_by("name")
+    depots = get_visible_depots(request.user).select_related("territory").order_by("name")
     return render(request, "depots/depot_list.html", {"depots": depots})
 
 
 @login_required
 def depot_detail(request, pk):
     depot = get_object_or_404(Depot.objects.select_related("territory"), pk=pk)
+
+    if not user_can_access_depot(request.user, depot):
+        messages.error(request, "You do not have access to that depot.")
+        return redirect("depots:depot_list")
+
     return render(request, "depots/depot_detail.html", {"depot": depot})
 
 

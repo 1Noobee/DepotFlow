@@ -4,6 +4,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.forms import inlineformset_factory
 
+from core.scoping import get_visible_depots
 from .models import (
     Vehicle, VehicleSalesman, VehicleLoad, VehicleLoadItem,
     VehicleReturn, VehicleReturnItem, SalesTarget,
@@ -17,6 +18,11 @@ class VehicleForm(forms.ModelForm):
         model = Vehicle
         fields = ["depot", "registration_number", "vehicle_name", "capacity", "is_active"]
 
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user is not None:
+            self.fields["depot"].queryset = get_visible_depots(user)
+
 
 class VehicleReassignForm(forms.Form):
     """
@@ -29,7 +35,7 @@ class VehicleReassignForm(forms.Form):
     original vehicle.
     """
 
-    def __init__(self, *args, vehicle=None, **kwargs):
+    def __init__(self, *args, vehicle=None, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.vehicle = vehicle
         self._row_meta = []
@@ -38,7 +44,10 @@ class VehicleReassignForm(forms.Form):
         text_attrs = {"class": "w-full rounded border border-stone-300 text-sm px-2 py-1.5"}
         number_attrs = {"class": "w-24 rounded border border-stone-300 text-sm px-2 py-1.5"}
 
-        other_vehicles = Vehicle.objects.exclude(pk=vehicle.pk).order_by("registration_number")
+        other_vehicles = Vehicle.objects.exclude(pk=vehicle.pk)
+        if user is not None:
+            other_vehicles = other_vehicles.filter(depot__in=get_visible_depots(user))
+        other_vehicles = other_vehicles.order_by("registration_number")
 
         for salesman in VehicleSalesman.objects.filter(vehicle=vehicle).order_by("name"):
             existing_name = f"existing_vehicle_{salesman.id}"
@@ -170,8 +179,13 @@ class VehicleSalesmanForm(forms.ModelForm):
         model = VehicleSalesman
         fields = ["name", "employee_id", "phone", "depot", "vehicle", "is_active"]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+
+        if user is not None:
+            visible_depots = get_visible_depots(user)
+            self.fields["depot"].queryset = visible_depots
+            self.fields["vehicle"].queryset = Vehicle.objects.filter(depot__in=visible_depots)
 
         self._needs_login = not (self.instance.pk and self.instance.user_id)
 
@@ -341,6 +355,13 @@ class SalesTargetForm(forms.ModelForm):
         model = SalesTarget
         fields = ["salesman", "year", "month", "target_quantity"]
 
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user is not None:
+            self.fields["salesman"].queryset = VehicleSalesman.objects.filter(
+                depot__in=get_visible_depots(user)
+            )
+
 
 class VehicleLoadForm(forms.ModelForm):
     """
@@ -355,6 +376,14 @@ class VehicleLoadForm(forms.ModelForm):
     class Meta:
         model = VehicleLoad
         fields = ["salesman", "vehicle", "depot", "notes"]
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user is not None:
+            visible_depots = get_visible_depots(user)
+            self.fields["depot"].queryset = visible_depots
+            self.fields["vehicle"].queryset = Vehicle.objects.filter(depot__in=visible_depots)
+            self.fields["salesman"].queryset = VehicleSalesman.objects.filter(depot__in=visible_depots)
 
 
 VehicleLoadItemFormSet = inlineformset_factory(

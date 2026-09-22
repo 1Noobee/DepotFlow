@@ -1,6 +1,7 @@
 from django import forms
 from django.forms import inlineformset_factory
 
+from core.scoping import get_visible_depots
 from .models import Product, Supplier, StockReceipt, StockReceiptItem, Promotion
 
 
@@ -47,6 +48,11 @@ class StockReceiptForm(forms.ModelForm):
     class Meta:
         model = StockReceipt
         fields = ["supplier", "depot", "receipt_date"]
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user is not None:
+            self.fields["depot"].queryset = get_visible_depots(user)
 
 
 StockReceiptItemFormSet = inlineformset_factory(

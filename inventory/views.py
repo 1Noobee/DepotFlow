@@ -5,6 +5,7 @@ from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 
 from depots.models import Depot
+from core.scoping import get_visible_depots, user_can_access_depot
 from .models import Product, Supplier, StockReceipt, Promotion
 from .forms import (
     ProductForm, PriceChangeForm, SupplierForm,
@@ -56,6 +57,10 @@ def stock_balance_lookup(request):
 
     product = get_object_or_404(Product, pk=product_id)
     depot = get_object_or_404(Depot, pk=depot_id)
+
+    if not user_can_access_depot(request.user, depot):
+        return JsonResponse({"error": "You do not have access to that depot."}, status=403)
+
     balance = get_stock_balance(depot, product)
 
     return JsonResponse({"product_id": product.id, "depot_id": depot.id, "stock_balance": balance})
@@ -240,7 +245,10 @@ def supplier_update(request, pk):
 # =========================
 @login_required
 def stock_receipt_list(request):
-    receipts = StockReceipt.objects.select_related("supplier", "depot").order_by("-receipt_date")
+    receipts = (
+        StockReceipt.objects.filter(depot__in=get_visible_depots(request.user))
+        .select_related("supplier", "depot").order_by("-receipt_date")
+    )
     return render(request, "inventory/stock_receipt_list.html", {"receipts": receipts})
 
 
@@ -249,6 +257,11 @@ def stock_receipt_detail(request, pk):
     receipt = get_object_or_404(
         StockReceipt.objects.select_related("supplier", "depot"), pk=pk
     )
+
+    if not user_can_access_depot(request.user, receipt.depot):
+        messages.error(request, "You do not have access to that stock receipt.")
+        return redirect("inventory:stock_receipt_list")
+
     items = receipt.items.select_related("product").all()
     return render(request, "inventory/stock_receipt_detail.html", {"receipt": receipt, "items": items})
 

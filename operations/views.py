@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from reports.services import get_salesman_target_progress
 from sales.models import Sale, SaleItem
+from core.scoping import get_visible_depots, user_can_access_depot
 
 from .models import Vehicle, VehicleSalesman, VehicleLoad, VehicleReturn, VehicleReturnItem, SalesTarget
 from .forms import (
@@ -40,7 +41,7 @@ def _can_set_targets(user):
 # =========================
 @login_required
 def vehicle_list(request):
-    vehicles = Vehicle.objects.select_related("depot").order_by("registration_number")
+    vehicles = Vehicle.objects.filter(depot__in=get_visible_depots(request.user)).select_related("depot").order_by("registration_number")
     return render(request, "operations/vehicle_list.html", {"vehicles": vehicles})
 
 
@@ -51,13 +52,13 @@ def vehicle_create(request):
         return redirect("operations:vehicle_list")
 
     if request.method == "POST":
-        form = VehicleForm(request.POST)
+        form = VehicleForm(request.POST, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Vehicle created.")
             return redirect("operations:vehicle_list")
     else:
-        form = VehicleForm()
+        form = VehicleForm(user=request.user)
 
     return render(request, "operations/vehicle_form.html", {"form": form, "title": "New Vehicle"})
 
@@ -70,14 +71,18 @@ def vehicle_update(request, pk):
         messages.error(request, "You do not have permission to edit vehicles.")
         return redirect("operations:vehicle_list")
 
+    if not user_can_access_depot(request.user, vehicle.depot):
+        messages.error(request, "You do not have access to that vehicle.")
+        return redirect("operations:vehicle_list")
+
     if request.method == "POST":
-        form = VehicleForm(request.POST, instance=vehicle)
+        form = VehicleForm(request.POST, instance=vehicle, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Vehicle updated.")
             return redirect("operations:vehicle_list")
     else:
-        form = VehicleForm(instance=vehicle)
+        form = VehicleForm(instance=vehicle, user=request.user)
 
     return render(request, "operations/vehicle_form.html", {"form": form, "title": "Edit Vehicle"})
 
@@ -97,6 +102,10 @@ def vehicle_delete(request, pk):
 
     if not _can_manage_operations(request.user):
         messages.error(request, "You do not have permission to delete vehicles.")
+        return redirect("operations:vehicle_list")
+
+    if not user_can_access_depot(request.user, vehicle.depot):
+        messages.error(request, "You do not have access to that vehicle.")
         return redirect("operations:vehicle_list")
 
     if request.method != "POST":
@@ -139,6 +148,10 @@ def vehicle_reassign_and_delete(request, pk):
         messages.error(request, "You do not have permission to delete vehicles.")
         return redirect("operations:vehicle_list")
 
+    if not user_can_access_depot(request.user, vehicle.depot):
+        messages.error(request, "You do not have access to that vehicle.")
+        return redirect("operations:vehicle_list")
+
     if vehicle.loads.exists():
         messages.error(
             request,
@@ -155,7 +168,7 @@ def vehicle_reassign_and_delete(request, pk):
         return redirect("operations:vehicle_delete", pk=pk)
 
     if request.method == "POST":
-        form = VehicleReassignForm(request.POST, vehicle=vehicle)
+        form = VehicleReassignForm(request.POST, vehicle=vehicle, user=request.user)
 
         if form.is_valid():
             assigned_count = assigned_salesmen.count()
@@ -181,7 +194,7 @@ def vehicle_reassign_and_delete(request, pk):
             )
             return redirect("operations:vehicle_list")
     else:
-        form = VehicleReassignForm(vehicle=vehicle)
+        form = VehicleReassignForm(vehicle=vehicle, user=request.user)
 
     return render(request, "operations/vehicle_reassign_and_delete.html", {
         "vehicle": vehicle,
@@ -194,7 +207,9 @@ def vehicle_reassign_and_delete(request, pk):
 # =========================
 @login_required
 def salesman_list(request):
-    salesmen = VehicleSalesman.objects.select_related("depot", "vehicle").order_by("name")
+    salesmen = VehicleSalesman.objects.filter(
+        depot__in=get_visible_depots(request.user)
+    ).select_related("depot", "vehicle").order_by("name")
     return render(request, "operations/salesman_list.html", {"salesmen": salesmen})
 
 
@@ -205,13 +220,13 @@ def salesman_create(request):
         return redirect("operations:salesman_list")
 
     if request.method == "POST":
-        form = VehicleSalesmanForm(request.POST)
+        form = VehicleSalesmanForm(request.POST, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Salesman created.")
             return redirect("operations:salesman_list")
     else:
-        form = VehicleSalesmanForm()
+        form = VehicleSalesmanForm(user=request.user)
 
     return render(request, "operations/salesman_form.html", {"form": form, "title": "New Salesman"})
 
@@ -224,14 +239,18 @@ def salesman_update(request, pk):
         messages.error(request, "You do not have permission to edit salesmen.")
         return redirect("operations:salesman_list")
 
+    if not user_can_access_depot(request.user, salesman.depot):
+        messages.error(request, "You do not have access to that salesman.")
+        return redirect("operations:salesman_list")
+
     if request.method == "POST":
-        form = VehicleSalesmanForm(request.POST, instance=salesman)
+        form = VehicleSalesmanForm(request.POST, instance=salesman, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Salesman updated.")
             return redirect("operations:salesman_list")
     else:
-        form = VehicleSalesmanForm(instance=salesman)
+        form = VehicleSalesmanForm(instance=salesman, user=request.user)
 
     return render(request, "operations/salesman_form.html", {"form": form, "title": "Edit Salesman"})
 
@@ -241,7 +260,9 @@ def salesman_update(request, pk):
 # =========================
 @login_required
 def load_list(request):
-    loads = VehicleLoad.objects.select_related("depot", "vehicle", "salesman").order_by("-load_date")
+    loads = VehicleLoad.objects.filter(
+        depot__in=get_visible_depots(request.user)
+    ).select_related("depot", "vehicle", "salesman").order_by("-load_date")
     return render(request, "operations/load_list.html", {"loads": loads})
 
 
@@ -250,6 +271,11 @@ def load_detail(request, pk):
     load = get_object_or_404(
         VehicleLoad.objects.select_related("depot", "vehicle", "salesman"), pk=pk
     )
+
+    if not user_can_access_depot(request.user, load.depot):
+        messages.error(request, "You do not have access to that vehicle load.")
+        return redirect("operations:load_list")
+
     items = load.items.select_related("product").all()
     returns = load.returns.all()
 
@@ -270,7 +296,7 @@ def load_create(request):
         return redirect("operations:load_list")
 
     if request.method == "POST":
-        form = VehicleLoadForm(request.POST)
+        form = VehicleLoadForm(request.POST, user=request.user)
 
         if form.is_valid():
             load = form.save(commit=False)
@@ -290,7 +316,7 @@ def load_create(request):
         else:
             formset = VehicleLoadItemFormSet(request.POST, instance=VehicleLoad())
     else:
-        form = VehicleLoadForm()
+        form = VehicleLoadForm(user=request.user)
         formset = VehicleLoadItemFormSet(instance=VehicleLoad())
 
     return render(request, "operations/load_form.html", {
@@ -318,6 +344,10 @@ def load_close(request, pk):
     if not _can_manage_operations(request.user):
         messages.error(request, "You do not have permission to close vehicle loads.")
         return redirect("operations:load_detail", pk=pk)
+
+    if not user_can_access_depot(request.user, load.depot):
+        messages.error(request, "You do not have access to that vehicle load.")
+        return redirect("operations:load_list")
 
     if load.is_closed:
         messages.error(request, "This vehicle load is already closed.")
@@ -383,6 +413,10 @@ def return_create(request, load_pk):
         messages.error(request, "You do not have permission to record vehicle returns.")
         return redirect("operations:load_detail", pk=load_pk)
 
+    if not user_can_access_depot(request.user, load.depot):
+        messages.error(request, "You do not have access to that vehicle load.")
+        return redirect("operations:load_list")
+
     if request.method == "POST":
         form = VehicleReturnForm(request.POST, vehicle_load=load)
 
@@ -414,8 +448,13 @@ def return_create(request, load_pk):
 @login_required
 def return_detail(request, pk):
     vehicle_return = get_object_or_404(
-        VehicleReturn.objects.select_related("vehicle_load"), pk=pk
+        VehicleReturn.objects.select_related("vehicle_load", "vehicle_load__depot"), pk=pk
     )
+
+    if not user_can_access_depot(request.user, vehicle_return.vehicle_load.depot):
+        messages.error(request, "You do not have access to that vehicle return.")
+        return redirect("operations:load_list")
+
     items = vehicle_return.items.select_related("product").all()
 
     return render(request, "operations/return_detail.html", {
@@ -427,11 +466,17 @@ def return_detail(request, pk):
 
 @login_required
 def return_confirm(request, pk):
-    vehicle_return = get_object_or_404(VehicleReturn, pk=pk)
+    vehicle_return = get_object_or_404(
+        VehicleReturn.objects.select_related("vehicle_load", "vehicle_load__depot"), pk=pk
+    )
 
     if not _can_manage_operations(request.user):
         messages.error(request, "You do not have permission to confirm vehicle returns.")
         return redirect("operations:return_detail", pk=pk)
+
+    if not user_can_access_depot(request.user, vehicle_return.vehicle_load.depot):
+        messages.error(request, "You do not have access to that vehicle return.")
+        return redirect("operations:load_list")
 
     if request.method == "POST":
         try:
@@ -478,7 +523,9 @@ def my_loads(request):
 # =========================
 @login_required
 def target_list(request):
-    targets = SalesTarget.objects.select_related("salesman", "salesman__depot").order_by(
+    targets = SalesTarget.objects.filter(
+        salesman__depot__in=get_visible_depots(request.user)
+    ).select_related("salesman", "salesman__depot").order_by(
         "-year", "-month", "salesman__name"
     )
 
@@ -495,32 +542,36 @@ def target_create(request):
         return redirect("operations:target_list")
 
     if request.method == "POST":
-        form = SalesTargetForm(request.POST)
+        form = SalesTargetForm(request.POST, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Sales target set.")
             return redirect("operations:target_list")
     else:
-        form = SalesTargetForm()
+        form = SalesTargetForm(user=request.user)
 
     return render(request, "operations/target_form.html", {"form": form, "title": "Set Sales Target"})
 
 
 @login_required
 def target_update(request, pk):
-    target = get_object_or_404(SalesTarget, pk=pk)
+    target = get_object_or_404(SalesTarget.objects.select_related("salesman", "salesman__depot"), pk=pk)
 
     if not _can_set_targets(request.user):
         messages.error(request, "You do not have permission to edit sales targets.")
         return redirect("operations:target_list")
 
+    if not user_can_access_depot(request.user, target.salesman.depot):
+        messages.error(request, "You do not have access to that sales target.")
+        return redirect("operations:target_list")
+
     if request.method == "POST":
-        form = SalesTargetForm(request.POST, instance=target)
+        form = SalesTargetForm(request.POST, instance=target, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Sales target updated.")
             return redirect("operations:target_list")
     else:
-        form = SalesTargetForm(instance=target)
+        form = SalesTargetForm(instance=target, user=request.user)
 
     return render(request, "operations/target_form.html", {"form": form, "title": "Edit Sales Target"})

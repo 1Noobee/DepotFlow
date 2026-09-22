@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from core.permissions import role_permission
+from core.scoping import get_visible_depots
 from .models import (
     Vehicle, VehicleSalesman, VehicleLoad, VehicleLoadItem,
     VehicleReturn, VehicleReturnItem,
@@ -18,26 +19,37 @@ _OPERATIONS_ROLES = ("SUPER_ADMIN", "DEPOT_MANAGER", "DEPOT_OFFICER")
 
 
 class VehicleViewSet(viewsets.ModelViewSet):
-    queryset = Vehicle.objects.select_related("depot").order_by("registration_number")
     serializer_class = VehicleSerializer
     permission_classes = [role_permission(*_OPERATIONS_ROLES)]
 
+    def get_queryset(self):
+        return Vehicle.objects.filter(
+            depot__in=get_visible_depots(self.request.user)
+        ).select_related("depot").order_by("registration_number")
+
 
 class VehicleSalesmanViewSet(viewsets.ModelViewSet):
-    queryset = VehicleSalesman.objects.select_related("depot", "vehicle").order_by("name")
     serializer_class = VehicleSalesmanSerializer
     permission_classes = [role_permission(*_OPERATIONS_ROLES)]
 
+    def get_queryset(self):
+        return VehicleSalesman.objects.filter(
+            depot__in=get_visible_depots(self.request.user)
+        ).select_related("depot", "vehicle").order_by("name")
+
 
 class VehicleLoadViewSet(viewsets.ModelViewSet):
-    queryset = (
-        VehicleLoad.objects
-        .select_related("depot", "vehicle", "salesman")
-        .prefetch_related("items")
-        .order_by("-load_date", "-created_at")
-    )
     serializer_class = VehicleLoadSerializer
     permission_classes = [role_permission(*_OPERATIONS_ROLES)]
+
+    def get_queryset(self):
+        return (
+            VehicleLoad.objects
+            .filter(depot__in=get_visible_depots(self.request.user))
+            .select_related("depot", "vehicle", "salesman")
+            .prefetch_related("items")
+            .order_by("-load_date", "-created_at")
+        )
 
     @action(detail=True, methods=["post"])
     def close(self, request, pk=None):
@@ -56,12 +68,13 @@ class VehicleLoadItemViewSet(viewsets.ModelViewSet):
     viewset does not duplicate that logic.
     """
 
-    queryset = VehicleLoadItem.objects.select_related("vehicle_load", "product").all()
     serializer_class = VehicleLoadItemSerializer
     permission_classes = [role_permission(*_OPERATIONS_ROLES)]
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = VehicleLoadItem.objects.filter(
+            vehicle_load__depot__in=get_visible_depots(self.request.user)
+        ).select_related("vehicle_load", "product")
         vehicle_load_id = self.request.query_params.get("vehicle_load")
         if vehicle_load_id:
             queryset = queryset.filter(vehicle_load_id=vehicle_load_id)
@@ -69,14 +82,17 @@ class VehicleLoadItemViewSet(viewsets.ModelViewSet):
 
 
 class VehicleReturnViewSet(viewsets.ModelViewSet):
-    queryset = (
-        VehicleReturn.objects
-        .select_related("vehicle_load")
-        .prefetch_related("items")
-        .order_by("-return_date", "-created_at")
-    )
     serializer_class = VehicleReturnSerializer
     permission_classes = [role_permission(*_OPERATIONS_ROLES)]
+
+    def get_queryset(self):
+        return (
+            VehicleReturn.objects
+            .filter(vehicle_load__depot__in=get_visible_depots(self.request.user))
+            .select_related("vehicle_load")
+            .prefetch_related("items")
+            .order_by("-return_date", "-created_at")
+        )
 
     @action(detail=True, methods=["post"])
     def confirm(self, request, pk=None):
@@ -88,12 +104,13 @@ class VehicleReturnViewSet(viewsets.ModelViewSet):
 class VehicleReturnItemViewSet(viewsets.ModelViewSet):
     """Filter by ?vehicle_return=<id>."""
 
-    queryset = VehicleReturnItem.objects.select_related("vehicle_return", "product").all()
     serializer_class = VehicleReturnItemSerializer
     permission_classes = [role_permission(*_OPERATIONS_ROLES)]
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = VehicleReturnItem.objects.filter(
+            vehicle_return__vehicle_load__depot__in=get_visible_depots(self.request.user)
+        ).select_related("vehicle_return", "product")
         vehicle_return_id = self.request.query_params.get("vehicle_return")
         if vehicle_return_id:
             queryset = queryset.filter(vehicle_return_id=vehicle_return_id)

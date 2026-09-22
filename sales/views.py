@@ -4,6 +4,7 @@ from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 
 from operations.models import VehicleLoad
+from core.scoping import get_visible_depots, user_can_access_depot
 from .models import Customer, Sale
 from .forms import CustomerForm, SaleForm, SaleItemFormSet
 
@@ -25,7 +26,9 @@ def _can_manage_sales(user):
 # =========================
 @login_required
 def customer_list(request):
-    customers = Customer.objects.select_related("depot").order_by("name")
+    customers = Customer.objects.filter(
+        depot__in=get_visible_depots(request.user)
+    ).select_related("depot").order_by("name")
     return render(request, "sales/customer_list.html", {"customers": customers})
 
 
@@ -36,13 +39,13 @@ def customer_create(request):
         return redirect("sales:customer_list")
 
     if request.method == "POST":
-        form = CustomerForm(request.POST)
+        form = CustomerForm(request.POST, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Customer created.")
             return redirect("sales:customer_list")
     else:
-        form = CustomerForm()
+        form = CustomerForm(user=request.user)
 
     return render(request, "sales/customer_form.html", {"form": form, "title": "New Customer"})
 
@@ -55,14 +58,18 @@ def customer_update(request, pk):
         messages.error(request, "You do not have permission to edit customers.")
         return redirect("sales:customer_list")
 
+    if not user_can_access_depot(request.user, customer.depot):
+        messages.error(request, "You do not have access to that customer.")
+        return redirect("sales:customer_list")
+
     if request.method == "POST":
-        form = CustomerForm(request.POST, instance=customer)
+        form = CustomerForm(request.POST, instance=customer, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Customer updated.")
             return redirect("sales:customer_list")
     else:
-        form = CustomerForm(instance=customer)
+        form = CustomerForm(instance=customer, user=request.user)
 
     return render(request, "sales/customer_form.html", {"form": form, "title": "Edit Customer"})
 
@@ -72,15 +79,22 @@ def customer_update(request, pk):
 # =========================
 @login_required
 def sale_list(request):
-    sales = Sale.objects.select_related("vehicle_load", "salesman", "customer").order_by("-sale_date")
+    sales = Sale.objects.filter(
+        vehicle_load__depot__in=get_visible_depots(request.user)
+    ).select_related("vehicle_load", "salesman", "customer").order_by("-sale_date")
     return render(request, "sales/sale_list.html", {"sales": sales})
 
 
 @login_required
 def sale_detail(request, pk):
     sale = get_object_or_404(
-        Sale.objects.select_related("vehicle_load", "salesman", "customer"), pk=pk
+        Sale.objects.select_related("vehicle_load", "vehicle_load__depot", "salesman", "customer"), pk=pk
     )
+
+    if not user_can_access_depot(request.user, sale.vehicle_load.depot):
+        messages.error(request, "You do not have access to that sale.")
+        return redirect("sales:sale_list")
+
     items = sale.items.select_related("product", "promotion").all()
 
     return render(request, "sales/sale_detail.html", {
@@ -97,6 +111,10 @@ def sale_create(request, load_pk):
     if not _can_manage_sales(request.user):
         messages.error(request, "You do not have permission to record sales.")
         return redirect("operations:load_detail", pk=load_pk)
+
+    if not user_can_access_depot(request.user, load.depot):
+        messages.error(request, "You do not have access to that vehicle load.")
+        return redirect("operations:load_list")
 
     if request.method == "POST":
         form = SaleForm(request.POST, vehicle_load=load)
@@ -129,11 +147,15 @@ def sale_create(request, load_pk):
 
 @login_required
 def sale_finalize(request, pk):
-    sale = get_object_or_404(Sale, pk=pk)
+    sale = get_object_or_404(Sale.objects.select_related("vehicle_load", "vehicle_load__depot"), pk=pk)
 
     if not _can_manage_sales(request.user):
         messages.error(request, "You do not have permission to finalize sales.")
         return redirect("sales:sale_detail", pk=pk)
+
+    if not user_can_access_depot(request.user, sale.vehicle_load.depot):
+        messages.error(request, "You do not have access to that sale.")
+        return redirect("sales:sale_list")
 
     if request.method == "POST":
         try:
