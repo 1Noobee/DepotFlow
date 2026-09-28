@@ -1,7 +1,7 @@
 from django import forms
 from django.forms import inlineformset_factory
 
-from core.scoping import get_visible_depots
+from core.scoping import get_default_depot, get_visible_depots
 from .models import Customer, Sale, SaleItem
 
 
@@ -14,6 +14,10 @@ class CustomerForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if user is not None:
             self.fields["depot"].queryset = get_visible_depots(user)
+            default_depot = get_default_depot(user)
+            if default_depot is not None:
+                self.fields["depot"].initial = default_depot.pk
+                self.fields["depot"].widget = forms.HiddenInput()
 
 
 class SaleForm(forms.ModelForm):

@@ -5,6 +5,7 @@ from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 
 from depots.models import Depot
+from operations.models import VehicleSalesman
 from core.scoping import get_visible_depots, user_can_access_depot
 from .models import Product, Supplier, StockReceipt, Promotion
 from .forms import (
@@ -47,16 +48,29 @@ def stock_balance_lookup(request):
     Small JSON endpoint backing the "available stock" hint shown
     next to the product field when adding vehicle load items — not
     a page of its own, just data for that one bit of UI.
+
+    Accepts either ?depot=<id> or ?salesman=<id> — the load form no
+    longer has its own depot field (it's derived from the picked
+    salesman), so the hint resolves the depot from the salesman
+    instead when that's what's available.
     """
 
     product_id = request.GET.get("product")
     depot_id = request.GET.get("depot")
+    salesman_id = request.GET.get("salesman")
 
-    if not product_id or not depot_id:
-        return JsonResponse({"error": "product and depot query params are required"}, status=400)
+    if not product_id or not (depot_id or salesman_id):
+        return JsonResponse(
+            {"error": "product and (depot or salesman) query params are required"}, status=400
+        )
 
     product = get_object_or_404(Product, pk=product_id)
-    depot = get_object_or_404(Depot, pk=depot_id)
+
+    if salesman_id:
+        salesman = get_object_or_404(VehicleSalesman, pk=salesman_id)
+        depot = salesman.depot
+    else:
+        depot = get_object_or_404(Depot, pk=depot_id)
 
     if not user_can_access_depot(request.user, depot):
         return JsonResponse({"error": "You do not have access to that depot."}, status=403)

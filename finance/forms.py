@@ -1,6 +1,6 @@
 from django import forms
 
-from core.scoping import get_visible_depots
+from core.scoping import get_default_depot, get_visible_depots
 from .models import Expense, SupplierPayment, SupplierRebate
 
 
@@ -19,6 +19,10 @@ class ExpenseForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if user is not None:
             self.fields["depot"].queryset = get_visible_depots(user)
+            default_depot = get_default_depot(user)
+            if default_depot is not None:
+                self.fields["depot"].initial = default_depot.pk
+                self.fields["depot"].widget = forms.HiddenInput()
 
 
 class SupplierPaymentForm(forms.ModelForm):
@@ -30,6 +34,10 @@ class SupplierPaymentForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if user is not None:
             self.fields["depot"].queryset = get_visible_depots(user)
+            default_depot = get_default_depot(user)
+            if default_depot is not None:
+                self.fields["depot"].initial = default_depot.pk
+                self.fields["depot"].widget = forms.HiddenInput()
 
 
 class SupplierRebateForm(forms.ModelForm):
@@ -41,6 +49,10 @@ class SupplierRebateForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if user is not None:
             self.fields["depot"].queryset = get_visible_depots(user)
+            default_depot = get_default_depot(user)
+            if default_depot is not None:
+                self.fields["depot"].initial = default_depot.pk
+                self.fields["depot"].widget = forms.HiddenInput()
 
 
 class ReversalForm(forms.Form):

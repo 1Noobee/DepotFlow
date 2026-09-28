@@ -4,7 +4,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.forms import inlineformset_factory
 
-from core.scoping import get_visible_depots
+from core.scoping import get_default_depot, get_visible_depots
 from .models import (
     Vehicle, VehicleSalesman, VehicleLoad, VehicleLoadItem,
     VehicleReturn, VehicleReturnItem, SalesTarget,
@@ -22,6 +22,10 @@ class VehicleForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if user is not None:
             self.fields["depot"].queryset = get_visible_depots(user)
+            default_depot = get_default_depot(user)
+            if default_depot is not None:
+                self.fields["depot"].initial = default_depot.pk
+                self.fields["depot"].widget = forms.HiddenInput()
 
 
 class VehicleReassignForm(forms.Form):
@@ -185,7 +189,19 @@ class VehicleSalesmanForm(forms.ModelForm):
         if user is not None:
             visible_depots = get_visible_depots(user)
             self.fields["depot"].queryset = visible_depots
-            self.fields["vehicle"].queryset = Vehicle.objects.filter(depot__in=visible_depots)
+
+            visible_vehicles = Vehicle.objects.filter(depot__in=visible_depots)
+            self.fields["vehicle"].queryset = visible_vehicles
+
+            default_depot = get_default_depot(user)
+            if default_depot is not None:
+                self.fields["depot"].initial = default_depot.pk
+                self.fields["depot"].widget = forms.HiddenInput()
+
+            single_vehicle = list(visible_vehicles[:2])
+            if len(single_vehicle) == 1:
+                self.fields["vehicle"].initial = single_vehicle[0].pk
+                self.fields["vehicle"].widget = forms.HiddenInput()
 
         self._needs_login = not (self.instance.pk and self.instance.user_id)
 
@@ -365,9 +381,15 @@ class SalesTargetForm(forms.ModelForm):
 
 class VehicleLoadForm(forms.ModelForm):
     """
-    load_number is excluded — auto-generated in VehicleLoad.save().
-    load_date is excluded too — always today (the model's default),
-    never user-editable, so a load's date can't be backdated or
+    Only salesman is picked here — vehicle and depot are both
+    derived automatically from that salesman's own assignment
+    (VehicleSalesman.vehicle/.depot in clean() below), since every
+    salesman is already tied to exactly one vehicle and one depot;
+    asking the user to separately re-pick vehicle/depot after
+    picking the salesman was pure redundancy. load_number is
+    excluded — auto-generated in VehicleLoad.save(). load_date is
+    excluded too — always today (the model's default), never
+    user-editable, so a load's date can't be backdated or
     forward-dated. This is also what makes the "same-day reload"
     rule in VehicleLoad.clean() reliable: every load a user creates
     is dated today, full stop.
@@ -375,15 +397,32 @@ class VehicleLoadForm(forms.ModelForm):
 
     class Meta:
         model = VehicleLoad
-        fields = ["salesman", "vehicle", "depot", "notes"]
+        fields = ["salesman", "notes"]
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         if user is not None:
-            visible_depots = get_visible_depots(user)
-            self.fields["depot"].queryset = visible_depots
-            self.fields["vehicle"].queryset = Vehicle.objects.filter(depot__in=visible_depots)
-            self.fields["salesman"].queryset = VehicleSalesman.objects.filter(depot__in=visible_depots)
+            self.fields["salesman"].queryset = VehicleSalesman.objects.filter(
+                depot__in=get_visible_depots(user)
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        salesman = cleaned_data.get("salesman")
+
+        if salesman is not None:
+            if salesman.vehicle_id is None:
+                self.add_error(
+                    "salesman",
+                    f"{salesman.name} has no vehicle assigned yet — assign one on "
+                    "the Salesmen page before creating a load for them.",
+                )
+            else:
+                self.instance.vehicle = salesman.vehicle
+
+            self.instance.depot = salesman.depot
+
+        return cleaned_data
 
 
 VehicleLoadItemFormSet = inlineformset_factory(

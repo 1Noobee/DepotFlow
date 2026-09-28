@@ -42,6 +42,22 @@ def _role(user):
     return getattr(user, "role", "")
 
 
+def get_default_depot(user):
+    """
+    If this user has exactly one visible depot, return it — forms
+    use this to auto-fill and hide their depot field instead of
+    showing a dropdown with a single, forced option. Returns None
+    when there's a genuine choice to make (Super Admin, or a
+    Territory Manager overseeing more than one depot), or when the
+    user has no visible depot at all (in which case the form's
+    depot queryset is already empty, so validation will correctly
+    block creation regardless).
+    """
+
+    depots = list(get_visible_depots(user)[:2])
+    return depots[0] if len(depots) == 1 else None
+
+
 def is_unrestricted(user):
     """Super Admin (or Django staff) — no scoping applies at all."""
     return bool(user.is_staff or _role(user) == "SUPER_ADMIN")

@@ -1,15 +1,19 @@
 /*
  * "Available stock at this depot" hint.
  *
- * Opt-in per page via a wrapper element:
+ * Opt-in per page via a wrapper element, using EITHER a depot field
+ * OR a salesman field as the reference for which depot's stock to
+ * check (the load form has no depot field of its own anymore — it's
+ * derived from the picked salesman — so this supports both):
  *
  *   <div data-stock-hint data-depot-field="id_depot">
+ *   <div data-stock-hint data-salesman-field="id_salesman">
  *     ... formset with product selects, each row also containing a
  *     <p data-stock-hint-text></p> placeholder (see
  *     partials/dynamic_formset.html's show_stock_hint option) ...
  *   </div>
  *
- * Refetches when: a product field changes, or the depot field
+ * Refetches when: a product field changes, or the reference field
  * changes (which refreshes every visible row, since they're all now
  * asking about a different depot). Uses event delegation on the
  * wrapper so newly added formset rows (via the Add Item button) are
@@ -17,8 +21,12 @@
  */
 document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('[data-stock-hint]').forEach(function (root) {
-        var depotField = document.getElementById(root.dataset.depotField);
-        if (!depotField) {
+        var depotField = root.dataset.depotField ? document.getElementById(root.dataset.depotField) : null;
+        var salesmanField = root.dataset.salesmanField ? document.getElementById(root.dataset.salesmanField) : null;
+        var referenceField = depotField || salesmanField;
+        var paramName = depotField ? 'depot' : 'salesman';
+
+        if (!referenceField) {
             return;
         }
 
@@ -33,10 +41,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            var depotId = depotField.value;
+            var referenceId = referenceField.value;
             var productId = productSelect.value;
 
-            if (!depotId || !productId) {
+            if (!referenceId || !productId) {
                 hint.textContent = '';
                 return;
             }
@@ -46,7 +54,7 @@ document.addEventListener('DOMContentLoaded', function () {
             hint.classList.add('text-stone-500');
 
             var url = '/inventory/stock-balance/?product=' + encodeURIComponent(productId) +
-                '&depot=' + encodeURIComponent(depotId);
+                '&' + paramName + '=' + encodeURIComponent(referenceId);
 
             fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(function (response) {
@@ -70,7 +78,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
-        depotField.addEventListener('change', function () {
+        referenceField.addEventListener('change', function () {
             root.querySelectorAll('select[name$="-product"]').forEach(refresh);
         });
 
