@@ -24,7 +24,7 @@ from inventory.services import (
     get_current_selling_price,
 )
 from operations.models import VehicleLoad, get_expected_profit_for_load, SalesTarget
-from finance.models import Expense, BusinessLedger
+from finance.models import Expense, BusinessLedger, SupplierRebate
 from sales.models import Sale, SaleItem
 
 
@@ -254,10 +254,32 @@ def get_expense_report(depot, date_from=None, date_to=None):
     }
 
 
+def get_supplier_rebate_report(depot, date_from=None, date_to=None):
+    """
+    Non-reversed supplier rebates for a depot. This is real cash the
+    business received back from a supplier, so — unlike the
+    discount/rebate a supplier applies before invoicing us, which is
+    already inside cost_price and never a separate figure — this
+    amount is additional income that get_net_profit_report() folds
+    in below.
+    """
+
+    rebates = SupplierRebate.objects.filter(depot=depot, is_reversed=False)
+    rebates = _date_range_filter(rebates, "rebate_date", date_from, date_to)
+
+    total = rebates.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+
+    return {
+        "depot": depot.name,
+        "total_rebates": total,
+    }
+
+
 def get_net_profit_report(depot, date_from=None, date_to=None):
     """
-    Actual net profit for a depot over a date range: finalized
-    sales revenue/cost minus non-reversed expenses.
+    Actual net profit for a depot over a date range: finalized sales
+    revenue/cost, plus non-reversed supplier rebates received, minus
+    non-reversed expenses.
     """
 
     sales = Sale.objects.filter(vehicle_load__depot=depot, is_finalized=True)
@@ -273,13 +295,24 @@ def get_net_profit_report(depot, date_from=None, date_to=None):
     expense_report = get_expense_report(depot, date_from, date_to)
     total_expenses = expense_report["total_expenses"]
 
+    rebate_report = get_supplier_rebate_report(depot, date_from, date_to)
+    total_rebates = rebate_report["total_rebates"]
+
     return {
         "depot": depot.name,
         "revenue": revenue,
         "cost": cost,
         "gross_profit": gross_profit,
         "total_expenses": total_expenses,
-        "net_profit": gross_profit - total_expenses,
+        "total_rebates": total_rebates,
+        "net_profit": gross_profit + total_rebates - total_expenses,
+        # Alternate view: sales revenue/cost aren't considered at all here.
+        # Rebates ARE treated as the business's profit, so this is simply
+        # what came back from suppliers minus what was spent running the
+        # depot in the period. Shown alongside the standard figure above
+        # so the person viewing the report can switch between the two,
+        # not as a replacement for it.
+        "net_profit_rebate_based": total_rebates - total_expenses,
     }
 
 
