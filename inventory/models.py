@@ -137,20 +137,20 @@ class Supplier(TimeStampedModel):
 # =========================
 class Promotion(TimeStampedModel):
     """
-    A date-bounded promotional condition affecting either:
+    A date-bounded promotional condition affecting how a depot's
+    selling price is reduced for a customer (customer discount,
+    volume discount, promotional selling price, buy X get Y).
 
-    - SUPPLIER_TO_DEPOT: how a depot's acquisition cost is reduced
-      (rebate, purchase discount, temporary buying price, buy X get Y).
-    - DEPOT_TO_CUSTOMER: how a depot's selling price is reduced
-      (customer discount, volume discount, promotional selling
-      price, buy X get Y).
+    There is no supplier-side promotion level: whatever a supplier
+    discounts, rebates, or otherwise adjusts is already reflected in
+    the invoiced cost_price on StockReceiptItem, so it needs no
+    separate record here.
 
     Applying a promotion must NEVER overwrite Product.base_* or a
     PriceHistory row. It only produces a calculated discount that
-    the relevant transaction (StockReceiptItem.supplier_discount/
-    supplier_rebate, or VehicleLoadItem.promo_discount) can record
-    against itself, preserving both the original price and the
-    applied adjustment.
+    the relevant transaction (VehicleLoadItem.promo_discount) can
+    record against itself, preserving both the original price and
+    the applied adjustment.
 
     There is no Customer/outlet model in the system yet (see
     project spec section 12 — future work), so DEPOT_TO_CUSTOMER
@@ -158,7 +158,6 @@ class Promotion(TimeStampedModel):
     """
 
     class Level(models.TextChoices):
-        SUPPLIER_TO_DEPOT = "SUPPLIER_TO_DEPOT", "Supplier -> Depot"
         DEPOT_TO_CUSTOMER = "DEPOT_TO_CUSTOMER", "Depot -> Customer"
 
     class PromotionType(models.TextChoices):
@@ -190,7 +189,9 @@ class Promotion(TimeStampedModel):
         related_name="promotions",
     )
 
-    # Only meaningful for SUPPLIER_TO_DEPOT promotions.
+    # Not currently used — kept only so historical promotions that
+    # had a supplier set still display correctly. There is no
+    # supplier-side promotion level to attach new ones to.
     supplier = models.ForeignKey(
         Supplier,
         on_delete=models.CASCADE,
@@ -265,11 +266,6 @@ class Promotion(TimeStampedModel):
                 "Minimum quantity cannot be greater than maximum quantity."
             )
 
-        if self.level == self.Level.SUPPLIER_TO_DEPOT and not self.supplier:
-            raise ValidationError(
-                "A supplier must be set for a supplier-to-depot promotion."
-            )
-
         if self.promotion_type == self.PromotionType.PERCENTAGE_DISCOUNT:
             if self.percentage_value is None:
                 raise ValidationError(
@@ -335,8 +331,8 @@ class Promotion(TimeStampedModel):
     def calculate_discount_per_unit(self, base_unit_price):
         """
         Return the per-unit discount this promotion implies against
-        a given base unit price (cost price for SUPPLIER_TO_DEPOT,
-        selling price for DEPOT_TO_CUSTOMER).
+        a given base unit price (the selling price, since
+        DEPOT_TO_CUSTOMER is the only level there is).
 
         Does NOT check dates/quantity/product applicability — call
         is_effective_on()/applies_to_product()/applies_to_quantity()
@@ -473,21 +469,16 @@ class StockReceiptItem(TimeStampedModel):
         decimal_places=2
     )
 
-    supplier_discount = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=0
-    )
-
-    supplier_rebate = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=0
-    )
-
     @property
     def effective_cost_price(self):
-        return self.cost_price - self.supplier_discount - self.supplier_rebate
+        """
+        Kept so callers elsewhere (inventory.services, operations,
+        serializers, templates) don't need to change. cost_price is
+        what the supplier actually invoiced, which already reflects
+        any discount, rebate, or other adjustment they applied — so
+        there is nothing left to subtract.
+        """
+        return self.cost_price
 
     @property
     def line_total(self):

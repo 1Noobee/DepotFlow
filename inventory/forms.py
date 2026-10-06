@@ -62,7 +62,7 @@ class StockReceiptForm(forms.ModelForm):
 StockReceiptItemFormSet = inlineformset_factory(
     StockReceipt,
     StockReceiptItem,
-    fields=["product", "quantity", "cost_price", "supplier_discount", "supplier_rebate"],
+    fields=["product", "quantity", "cost_price"],
     extra=1,
     can_delete=True,
 )

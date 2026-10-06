@@ -92,7 +92,7 @@ class StockReceiptItemInline(admin.TabularInline):
         # editable — it's the historical record of what was
         # actually paid. New items can still be added freely.
         if obj and obj.pk:
-            return ["product", "quantity", "cost_price", "supplier_discount", "supplier_rebate"]
+            return ["product", "quantity", "cost_price"]
         return []
 
 

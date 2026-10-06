@@ -5,20 +5,18 @@
 <p class="text-sm text-gray-600 mb-6">{{ receipt.supplier.name }} &middot; {{ receipt.depot.name }} &middot; {{ receipt.receipt_date }}</p>
 
 <div class="bg-white rounded shadow divide-y">
-    <div class="px-4 py-2 grid grid-cols-5 gap-4 text-xs font-medium text-gray-500 uppercase">
+    <div class="px-4 py-2 grid grid-cols-4 gap-4 text-xs font-medium text-gray-500 uppercase">
         <span>Product</span>
         <span>Quantity</span>
         <span>Cost Price</span>
-        <span>Discount/Rebate</span>
-        <span>Effective Cost</span>
+        <span>Line Total</span>
     </div>
     {% for item in items %}
-    <div class="px-4 py-3 grid grid-cols-5 gap-4 text-sm items-center">
+    <div class="px-4 py-3 grid grid-cols-4 gap-4 text-sm items-center">
         <span>{{ item.product.name }}</span>
         <span>{{ item.quantity }}</span>
         <span>&#8358;{{ item.cost_price }}</span>
-        <span>&#8358;{{ item.supplier_discount }} / &#8358;{{ item.supplier_rebate }}</span>
-        <span class="font-medium">&#8358;{{ item.effective_cost_price }}</span>
+        <span class="font-medium">&#8358;{{ item.line_total }}</span>
     </div>
     {% empty %}
     <div class="px-4 py-6 text-gray-500 text-sm">No items on this receipt.</div>
