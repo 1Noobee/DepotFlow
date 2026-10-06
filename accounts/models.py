@@ -6,9 +6,9 @@ from depots.models import Depot, Territory
 class User(AbstractUser):
     class Role(models.TextChoices):
         SUPER_ADMIN = "SUPER_ADMIN", "Super Admin"
-        TERRITORY_MANAGER = "TERRITORY_MANAGER", "Territory Manager"
-        DEPOT_MANAGER = "DEPOT_MANAGER", "Depot Manager"
-        DEPOT_OFFICER = "DEPOT_OFFICER", "Depot Officer"
+        TERRITORY_MANAGER = "TERRITORY_MANAGER", "Commercial Manager"
+        DEPOT_MANAGER = "DEPOT_MANAGER", "Distribution Manager"
+        DEPOT_OFFICER = "DEPOT_OFFICER", "Depot Manager"
         SALESMAN = "SALESMAN", "Salesman"
         FINANCE_OFFICER = "FINANCE_OFFICER", "Finance Officer"
         VIEWER = "VIEWER", "Viewer"

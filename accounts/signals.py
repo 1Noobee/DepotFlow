@@ -22,19 +22,34 @@ def capture_user_before_save(sender, instance, **kwargs):
 
 @receiver(post_save, sender=get_user_model())
 def log_user_permission_change(sender, instance, created, **kwargs):
-    if created:
-        return
-
     from core.audit import log_action
     from core.models import AuditLog
 
-    old_snapshot = getattr(instance, "_pre_save_permission_snapshot", None)
+    # Set by accounts.admin.CustomUserAdmin.save_model; None for
+    # shell/management-command changes.
+    actor = getattr(instance, "_changed_by", None)
+
     new_snapshot = _permission_snapshot(instance)
+
+    if created:
+        # Log the initial role/depot/staff flags of a brand-new user too.
+        log_action(
+            AuditLog.Action.PERMISSION_CHANGE,
+            obj=instance,
+            user=actor,
+            old_value=None,
+            new_value=new_snapshot,
+            notes="User created",
+        )
+        return
+
+    old_snapshot = getattr(instance, "_pre_save_permission_snapshot", None)
 
     if old_snapshot is not None and old_snapshot != new_snapshot:
         log_action(
             AuditLog.Action.PERMISSION_CHANGE,
             obj=instance,
+            user=actor,
             old_value=old_snapshot,
             new_value=new_snapshot,
         )
