@@ -32,6 +32,7 @@ class SupplierPaymentForm(forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["supplier"].queryset = self.fields["supplier"].queryset.filter(name__iexact="NBC")
         if user is not None:
             self.fields["depot"].queryset = get_visible_depots(user)
             default_depot = get_default_depot(user)
@@ -47,6 +48,7 @@ class SupplierRebateForm(forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["supplier"].queryset = self.fields["supplier"].queryset.filter(name__iexact="NBC")
         if user is not None:
             self.fields["depot"].queryset = get_visible_depots(user)
             default_depot = get_default_depot(user)

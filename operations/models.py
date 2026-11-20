@@ -610,15 +610,23 @@ class VehicleReturn(TimeStampedModel):
                     )
 
                 elif item.condition == "DAMAGED":
-
+                    # The load transaction already removed these units from
+                    # depot stock. Record their physical return first, then
+                    # write them off as damaged. The net stock movement is 0,
+                    # while both audit events remain visible in the ledger.
                     InventoryTransaction.objects.create(
                         depot=depot,
                         product=item.product,
-                        transaction_type=(
-                            InventoryTransaction
-                            .TransactionType
-                            .DAMAGE
-                        ),
+                        transaction_type=InventoryTransaction.TransactionType.VEHICLE_RETURN,
+                        quantity=item.quantity,
+                        unit_cost=unit_cost,
+                        reference=self.return_number,
+                        transaction_date=timezone.now(),
+                    )
+                    InventoryTransaction.objects.create(
+                        depot=depot,
+                        product=item.product,
+                        transaction_type=InventoryTransaction.TransactionType.DAMAGE,
                         quantity=-item.quantity,
                         unit_cost=unit_cost,
                         reference=self.return_number,

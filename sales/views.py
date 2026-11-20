@@ -16,6 +16,9 @@ def _can_manage_sales(user):
     part of the original spec's permission table).
     """
 
+    if getattr(user, "role", "") == "DEPOT_OWNER":
+        return False
+
     return user.is_staff or getattr(user, "role", "") in (
         "SUPER_ADMIN", "DEPOT_MANAGER", "DEPOT_OFFICER", "SALESMAN",
     )
@@ -29,7 +32,7 @@ def customer_list(request):
     customers = Customer.objects.filter(
         depot__in=get_visible_depots(request.user)
     ).select_related("depot").order_by("name")
-    return render(request, "sales/customer_list.html", {"customers": customers})
+    return render(request, "sales/customer_list.html", {"customers": customers, "can_manage": _can_manage_sales(request.user)})
 
 
 @login_required
@@ -82,7 +85,7 @@ def sale_list(request):
     sales = Sale.objects.filter(
         vehicle_load__depot__in=get_visible_depots(request.user)
     ).select_related("vehicle_load", "salesman", "customer").order_by("-sale_date")
-    return render(request, "sales/sale_list.html", {"sales": sales})
+    return render(request, "sales/sale_list.html", {"sales": sales, "can_manage": _can_manage_sales(request.user)})
 
 
 @login_required

@@ -4,9 +4,9 @@ Who may create which kinds of user through the app (not Django admin).
 Hierarchy (a role can create the roles BELOW it, never its own level
 or above):
 
-    Super Admin / staff  ->  Territory Manager, Depot Manager,
+    Super Admin / staff  ->  Territory Manager, Depot Owner, Depot Manager,
                              Depot Officer, Finance Officer, Viewer
-    Territory Manager    ->  Depot Manager, Depot Officer,
+    Territory Manager    ->  Depot Owner, Depot Manager, Depot Officer,
                              Finance Officer, Viewer   (own territory's depots)
     Depot Manager        ->  Depot Officer, Finance Officer, Viewer
                              (own depot only)
@@ -32,7 +32,7 @@ from .models import User
 _R = User.Role
 
 _BELOW_DEPOT_MANAGER = (_R.DEPOT_OFFICER, _R.FINANCE_OFFICER, _R.VIEWER)
-_BELOW_TERRITORY_MANAGER = (_R.DEPOT_MANAGER,) + _BELOW_DEPOT_MANAGER
+_BELOW_TERRITORY_MANAGER = (_R.DEPOT_OWNER, _R.DEPOT_MANAGER) + _BELOW_DEPOT_MANAGER
 _BELOW_SUPER_ADMIN = (_R.TERRITORY_MANAGER,) + _BELOW_TERRITORY_MANAGER
 
 

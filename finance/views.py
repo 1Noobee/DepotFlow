@@ -9,23 +9,31 @@ from .forms import ExpenseForm, SupplierPaymentForm, SupplierRebateForm, Reversa
 
 def _can_record_expenses(user):
     """
-    Staff, SUPER_ADMIN, DEPOT_MANAGER, or DEPOT_OFFICER can record
-    expenses (matches the original spec's permission table).
+    Staff, SUPER_ADMIN, DEPOT_OWNER, DEPOT_MANAGER, or DEPOT_OFFICER can
+    record expenses. Depot Owners remain scoped to their own depot.
     """
 
     return user.is_staff or getattr(user, "role", "") in (
-        "SUPER_ADMIN", "DEPOT_MANAGER", "DEPOT_OFFICER",
+        "SUPER_ADMIN", "DEPOT_OWNER", "DEPOT_MANAGER", "DEPOT_OFFICER",
     )
 
 
 def _can_approve_finance(user):
     """
-    Approving, reversing, and recording supplier payments/rebates is
-    restricted to SUPER_ADMIN, DEPOT_MANAGER, or FINANCE_OFFICER —
-    matches the original spec's Finance role ("manage/verify
-    financial records").
+    Expense approval/reversal and supplier-payment management are
+    available to Super Admin, Depot Owner, Distribution Manager and
+    Finance Officer. Depot scoping still limits Depot Owner to their
+    assigned depot. Supplier rebates use the separate rule below.
     """
+    return user.is_staff or getattr(user, "role", "") in (
+        "SUPER_ADMIN", "DEPOT_OWNER", "DEPOT_MANAGER", "FINANCE_OFFICER",
+    )
 
+
+def _can_manage_rebates(user):
+    """Supplier rebates remain read-only for Depot Owners, including staff-flagged accounts."""
+    if getattr(user, "role", "") == "DEPOT_OWNER":
+        return False
     return user.is_staff or getattr(user, "role", "") in (
         "SUPER_ADMIN", "DEPOT_MANAGER", "FINANCE_OFFICER",
     )
@@ -42,6 +50,7 @@ def expense_list(request):
     return render(request, "finance/expense_list.html", {
         "expenses": expenses,
         "can_approve": _can_approve_finance(request.user),
+        "can_record": _can_record_expenses(request.user),
     })
 
 
@@ -125,6 +134,7 @@ def supplier_payment_list(request):
     return render(request, "finance/supplier_payment_list.html", {
         "payments": payments,
         "can_approve": _can_approve_finance(request.user),
+        "can_record": _can_approve_finance(request.user),
     })
 
 
@@ -187,13 +197,14 @@ def supplier_rebate_list(request):
     ).select_related("depot", "supplier").order_by("-rebate_date")
     return render(request, "finance/supplier_rebate_list.html", {
         "rebates": rebates,
-        "can_approve": _can_approve_finance(request.user),
+        "can_approve": _can_manage_rebates(request.user),
+        "can_record": _can_manage_rebates(request.user),
     })
 
 
 @login_required
 def supplier_rebate_create(request):
-    if not _can_approve_finance(request.user):
+    if not _can_manage_rebates(request.user):
         messages.error(request, "You do not have permission to record supplier rebates.")
         return redirect("finance:supplier_rebate_list")
 
@@ -213,7 +224,7 @@ def supplier_rebate_create(request):
 def supplier_rebate_reverse(request, pk):
     rebate = get_object_or_404(SupplierRebate, pk=pk)
 
-    if not _can_approve_finance(request.user):
+    if not _can_manage_rebates(request.user):
         messages.error(request, "You do not have permission to reverse supplier rebates.")
         return redirect("finance:supplier_rebate_list")
 

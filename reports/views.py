@@ -229,7 +229,7 @@ def dashboard(request):
     """
     Role-specific KPI landing page (spec section 22).
 
-    - Depot Manager / Depot Officer: figures for their own depot
+    - Depot Manager / Depot Officer / Depot Owner: figures for their own depot
       (units sold, revenue, expenses, net position) over a chosen
       timeframe — defaults to today, plus this month's target
       progress for every salesman at that depot (target periods are
@@ -270,7 +270,7 @@ def dashboard(request):
         "week_start": week_start,
     }
 
-    if user.is_depot_manager or user.is_depot_officer:
+    if user.is_depot_manager or user.is_depot_officer or user.is_depot_owner:
         date_from = date_from_param or today
         date_to = date_to_param or today
         context["date_from"] = date_from

@@ -22,7 +22,7 @@
     <a href="{% url 'inventory:product_list' %}" class="flex-1 group block bg-white border border-stone-200 rounded-lg p-5 hover:border-depot-teal transition-colors">
         <span class="font-display text-2xl text-depot-amber">2</span>
         <h2 class="font-semibold mt-1">Inventory</h2>
-        <p class="text-sm text-stone-500 mt-1">Products, suppliers, stock receipts, and promotions.</p>
+        <p class="text-sm text-stone-500 mt-1">{% if nav_is_depot_owner %}View products, suppliers, stock receipts, and promotions.{% else %}Products, suppliers, stock receipts, and promotions.{% endif %}</p>
     </a>
 
     <div class="hidden lg:flex items-center px-1 text-stone-300">
@@ -63,28 +63,28 @@
     {% if nav_show_depots %}
     <a href="{% url 'depots:depot_list' %}" class="block bg-white border border-stone-200 rounded-lg p-5 hover:border-depot-teal transition-colors">
         <h2 class="font-semibold">Depots</h2>
-        <p class="text-sm text-stone-500 mt-1">Territories and depots in the business.</p>
+        <p class="text-sm text-stone-500 mt-1">{% if nav_manage_territories %}Territories and depots in the business.{% else %}Depots within your territory.{% endif %}</p>
     </a>
     {% endif %}
 
     {% if nav_show_inventory %}
     <a href="{% url 'inventory:product_list' %}" class="block bg-white border border-stone-200 rounded-lg p-5 hover:border-depot-teal transition-colors">
         <h2 class="font-semibold">Inventory</h2>
-        <p class="text-sm text-stone-500 mt-1">Products, suppliers, stock receipts, and promotions.</p>
+        <p class="text-sm text-stone-500 mt-1">{% if nav_is_depot_owner %}View products, suppliers, stock receipts, and promotions.{% else %}Products, suppliers, stock receipts, and promotions.{% endif %}</p>
     </a>
     {% endif %}
 
     {% if nav_show_operations %}
     <a href="{% url 'operations:load_list' %}" class="block bg-white border border-stone-200 rounded-lg p-5 hover:border-depot-teal transition-colors">
         <h2 class="font-semibold">Operations</h2>
-        <p class="text-sm text-stone-500 mt-1">Vehicle loads, vehicles, and salesmen.</p>
+        <p class="text-sm text-stone-500 mt-1">{% if nav_is_depot_owner %}View vehicle loads, vehicles, salesmen, and targets.{% else %}Vehicle loads, vehicles, and salesmen.{% endif %}</p>
     </a>
     {% endif %}
 
     {% if nav_show_sales %}
     <a href="{% url 'sales:sale_list' %}" class="block bg-white border border-stone-200 rounded-lg p-5 hover:border-depot-teal transition-colors">
         <h2 class="font-semibold">Sales</h2>
-        <p class="text-sm text-stone-500 mt-1">Record customer sales and manage customers.</p>
+        <p class="text-sm text-stone-500 mt-1">{% if nav_is_depot_owner %}View sales and customer records.{% else %}Record customer sales and manage customers.{% endif %}</p>
     </a>
     {% endif %}
 

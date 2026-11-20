@@ -1,4 +1,5 @@
 from django.test import TestCase
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 
 from core.models import AuditLog
@@ -47,11 +48,11 @@ class UserCreationTests(TestCase):
     def test_role_matrix(self):
         self.assertEqual(
             set(creatable_roles(self.admin)),
-            {R.TERRITORY_MANAGER, R.DEPOT_MANAGER, R.DEPOT_OFFICER, R.FINANCE_OFFICER, R.VIEWER},
+            {R.TERRITORY_MANAGER, R.DEPOT_OWNER, R.DEPOT_MANAGER, R.DEPOT_OFFICER, R.FINANCE_OFFICER, R.VIEWER},
         )
         self.assertEqual(
             set(creatable_roles(self.tm)),
-            {R.DEPOT_MANAGER, R.DEPOT_OFFICER, R.FINANCE_OFFICER, R.VIEWER},
+            {R.DEPOT_OWNER, R.DEPOT_MANAGER, R.DEPOT_OFFICER, R.FINANCE_OFFICER, R.VIEWER},
         )
         self.assertEqual(
             set(creatable_roles(self.dm)),
@@ -156,3 +157,16 @@ class UserCreationTests(TestCase):
 
         self.client.force_login(self.officer)
         self.assertNotContains(self.client.get(reverse("accounts:team_list")), "Add user")
+
+
+class DepotAssignmentValidationTests(TestCase):
+    def test_non_admin_user_requires_depot(self):
+        user = User(username="missing-depot", role=User.Role.DEPOT_OFFICER)
+        with self.assertRaises(ValidationError):
+            user.full_clean()
+
+    def test_super_admin_can_exist_without_depot(self):
+        user = User(username="root-user", role=User.Role.SUPER_ADMIN)
+        # Password is intentionally excluded: this test covers depot/territory
+        # assignment validation, not password-field validation.
+        user.full_clean(exclude=["password"])

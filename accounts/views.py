@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
+from django.http import HttpResponseForbidden
 
 from .models import User
 from .forms import ProfileForm, UserCreateForm
@@ -34,6 +35,8 @@ def team_list(request):
     territory). Role/permission changes are deliberately NOT
     editable here — that stays in Django admin.
     """
+    if getattr(request.user, "role", "") == "DEPOT_OWNER":
+        return HttpResponseForbidden("Depot Owners do not have access to team management.")
 
     if request.user.depot_id:
         colleagues = User.objects.filter(depot_id=request.user.depot_id).order_by("username")

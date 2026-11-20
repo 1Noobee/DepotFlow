@@ -7,26 +7,39 @@ from .models import Territory, Depot
 from .forms import TerritoryForm, DepotForm
 
 
-def _can_manage_depots(user):
-    """
-    Only staff or SUPER_ADMIN-role users can create/edit territories
-    and depots; everyone else can view whatever core.scoping says
-    is visible to them.
-    """
+def _is_global_depot_admin(user):
+    """Global depot administrator; scoped managers are never global admins."""
+    role = getattr(user, "role", "")
+    if role in ("TERRITORY_MANAGER", "DEPOT_OWNER"):
+        return False
+    return bool(user.is_staff or role == "SUPER_ADMIN")
 
-    return user.is_staff or getattr(user, "role", "") == "SUPER_ADMIN"
+
+def _can_manage_depots(user):
+    """Super Admins manage all depots; Commercial Managers manage their territory."""
+    return _is_global_depot_admin(user) or (
+        getattr(user, "role", "") == "TERRITORY_MANAGER"
+        and bool(getattr(user, "territory_id", None))
+    )
+
+
+def _depot_form(request, *args, **kwargs):
+    return DepotForm(*args, user=request.user, **kwargs)
 
 
 @login_required
 def territory_list(request):
     territories = get_visible_territories(request.user).order_by("name")
-    return render(request, "depots/territory_list.html", {"territories": territories})
+    return render(request, "depots/territory_list.html", {
+        "territories": territories,
+        "can_manage_territories": _is_global_depot_admin(request.user),
+    })
 
 
 @login_required
 def territory_create(request):
-    if not _can_manage_depots(request.user):
-        messages.error(request, "You do not have permission to create territories.")
+    if not _is_global_depot_admin(request.user):
+        messages.error(request, "Only Super Admins can create territories.")
         return redirect("depots:territory_list")
 
     if request.method == "POST":
@@ -43,11 +56,10 @@ def territory_create(request):
 
 @login_required
 def territory_update(request, pk):
-    territory = get_object_or_404(Territory, pk=pk)
-
-    if not _can_manage_depots(request.user):
-        messages.error(request, "You do not have permission to edit territories.")
+    if not _is_global_depot_admin(request.user):
+        messages.error(request, "Only Super Admins can edit territories.")
         return redirect("depots:territory_list")
+    territory = get_object_or_404(Territory, pk=pk)
 
     if request.method == "POST":
         form = TerritoryForm(request.POST, instance=territory)
@@ -64,7 +76,12 @@ def territory_update(request, pk):
 @login_required
 def depot_list(request):
     depots = get_visible_depots(request.user).select_related("territory").order_by("name")
-    return render(request, "depots/depot_list.html", {"depots": depots})
+    can_manage = _can_manage_depots(request.user)
+    return render(request, "depots/depot_list.html", {
+        "depots": depots,
+        "can_manage_depots": can_manage,
+        "can_manage_territories": _is_global_depot_admin(request.user),
+    })
 
 
 @login_required
@@ -75,7 +92,11 @@ def depot_detail(request, pk):
         messages.error(request, "You do not have access to that depot.")
         return redirect("depots:depot_list")
 
-    return render(request, "depots/depot_detail.html", {"depot": depot})
+    can_edit = _can_manage_depots(request.user) and (
+        _is_global_depot_admin(request.user)
+        or depot.territory_id == getattr(request.user, "territory_id", None)
+    )
+    return render(request, "depots/depot_detail.html", {"depot": depot, "can_edit_depot": can_edit})
 
 
 @login_required
@@ -85,32 +106,44 @@ def depot_create(request):
         return redirect("depots:depot_list")
 
     if request.method == "POST":
-        form = DepotForm(request.POST)
+        form = _depot_form(request, request.POST)
         if form.is_valid():
-            form.save()
+            depot = form.save(commit=False)
+            if not _is_global_depot_admin(request.user):
+                # Do not trust a submitted territory value, even if a
+                # crafted request bypasses the rendered form.
+                depot.territory_id = request.user.territory_id
+            depot.save()
             messages.success(request, "Depot created.")
             return redirect("depots:depot_list")
     else:
-        form = DepotForm()
+        form = _depot_form(request)
 
     return render(request, "depots/depot_form.html", {"form": form, "title": "New Depot"})
 
 
 @login_required
 def depot_update(request, pk):
-    depot = get_object_or_404(Depot, pk=pk)
-
-    if not _can_manage_depots(request.user):
+    if _is_global_depot_admin(request.user):
+        depot = get_object_or_404(Depot, pk=pk)
+    elif getattr(request.user, "role", "") == "TERRITORY_MANAGER" and request.user.territory_id:
+        depot = get_object_or_404(
+            Depot.objects.filter(territory_id=request.user.territory_id), pk=pk
+        )
+    else:
         messages.error(request, "You do not have permission to edit depots.")
         return redirect("depots:depot_list")
 
     if request.method == "POST":
-        form = DepotForm(request.POST, instance=depot)
+        form = _depot_form(request, request.POST, instance=depot)
         if form.is_valid():
-            form.save()
+            updated_depot = form.save(commit=False)
+            if getattr(request.user, "role", "") == "TERRITORY_MANAGER":
+                updated_depot.territory_id = request.user.territory_id
+            updated_depot.save()
             messages.success(request, "Depot updated.")
             return redirect("depots:depot_list")
     else:
-        form = DepotForm(instance=depot)
+        form = _depot_form(request, instance=depot)
 
     return render(request, "depots/depot_form.html", {"form": form, "title": "Edit Depot"})

@@ -8,6 +8,7 @@ from django.db.models import Sum
 from core.utils import generate_document_number, next_sequence
 from core.models import TimeStampedModel
 from depots.models import Depot
+from .landing_cost import landing_cost_breakdown
 
 
 # =========================
@@ -466,8 +467,38 @@ class StockReceiptItem(TimeStampedModel):
 
     cost_price = models.DecimalField(
         max_digits=12,
-        decimal_places=2
+        decimal_places=2,
+        help_text="Recorded acquisition/receipt cost. Do not add tax again if the entered cost is already tax-inclusive.",
     )
+
+    rebate_landing_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Optional rebate-based cost per case with VAT and excise taken out. If blank, it is worked out from the cost price using NBC's workbook formula (VAT 7.5% + N10 per litre excise).",
+    )
+
+    @property
+    def rebate_cost_breakdown(self):
+        """Price, VAT, excise and landing cost worked out from cost_price."""
+        return landing_cost_breakdown(self.cost_price, self.product.name)
+
+    @property
+    def effective_rebate_landing_cost(self):
+        """
+        Rebate-based cost per case (no tax). A value typed on the receipt
+        line wins; otherwise it comes from the cost price minus VAT and
+        excise, exactly as NBC's rebate workbook does it.
+        """
+        if self.rebate_landing_cost is not None:
+            return self.rebate_landing_cost
+        return self.rebate_cost_breakdown["landing_cost"]
+
+    @property
+    def rebate_cost_needs_review(self):
+        """True when the landing cost was estimated without excise (pack size unreadable)."""
+        return self.rebate_landing_cost is None and not self.rebate_cost_breakdown["excise_known"]
 
     @property
     def effective_cost_price(self):

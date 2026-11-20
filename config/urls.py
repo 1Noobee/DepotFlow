@@ -38,6 +38,7 @@ urlpatterns = [
     path('operations/', include('operations.urls')),
     path('sales/', include('sales.urls')),
     path('finance/', include('finance.urls')),
+    path('rebates/', include('rebates.urls')),
     path('accounts/', include('accounts.urls')),
 
     path('api/v1/', include('depots.api_urls')),

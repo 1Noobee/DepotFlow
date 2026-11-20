@@ -4,12 +4,16 @@
 <div class="flex items-center justify-between mb-6">
     <h1 class="text-2xl font-semibold">Depots</h1>
     <div class="flex items-center gap-3">
+        {% if can_manage_territories %}
         <a href="{% url 'depots:territory_list' %}" class="text-sm text-slate-600 hover:underline">
             Manage Territories
         </a>
+        {% endif %}
+        {% if can_manage_depots %}
         <a href="{% url 'depots:depot_create' %}" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
             New Depot
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -20,7 +24,9 @@
             <a href="{% url 'depots:depot_detail' depot.pk %}" class="font-medium hover:underline">{{ depot.name }}</a>
             <span class="text-sm text-gray-500 ml-2">{{ depot.code }} &middot; {{ depot.territory.name }}</span>
         </div>
+        {% if can_manage_depots %}
         <a href="{% url 'depots:depot_update' depot.pk %}" class="text-sm text-slate-600 hover:underline">Edit</a>
+        {% endif %}
     </div>
     {% empty %}
     <div class="px-4 py-6 text-gray-500 text-sm">No depots yet.</div>

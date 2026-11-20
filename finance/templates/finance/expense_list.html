@@ -7,9 +7,9 @@
         <!-- <a href="{% url 'finance:supplier_payment_list' %}" class="text-sm text-slate-600 hover:underline">Supplier Payments</a>
         <a href="{% url 'finance:supplier_rebate_list' %}" class="text-sm text-slate-600 hover:underline">Supplier Rebates</a>
         <a href="{% url 'finance:ledger_list' %}" class="text-sm text-slate-600 hover:underline">Business Ledger</a> -->
-        <a href="{% url 'finance:expense_create' %}" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
+        {% if can_record %}<a href="{% url 'finance:expense_create' %}" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
             New Expense
-        </a>
+        </a>{% endif %}
     </div>
 </div>
 

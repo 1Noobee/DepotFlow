@@ -9,14 +9,10 @@
     <p class="text-sm text-gray-500 mb-1">{{ request.user.depot.name }}</p>
     {% include "partials/date_range_form.html" %}
 
-    <div class="grid grid-cols-1 sm:grid-cols-5 gap-4 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
         <div class="bg-white p-5 rounded shadow min-w-0">
             <p class="text-sm text-gray-500">Units Sold</p>
             <p class="text-2xl font-semibold break-all">{{ depot_sales.total_quantity }}</p>
-        </div>
-        <div class="bg-white p-5 rounded shadow min-w-0">
-            <p class="text-sm text-gray-500">Revenue</p>
-            <p class="text-2xl font-semibold break-all">&#8358;{{ depot_net_profit.revenue }}</p>
         </div>
         <div class="bg-white p-5 rounded shadow min-w-0">
             <p class="text-sm text-gray-500">Expenses</p>
@@ -26,52 +22,13 @@
             <p class="text-sm text-gray-500">Supplier Rebates</p>
             <p class="text-2xl font-semibold break-all">&#8358;{{ depot_net_profit.total_rebates }}</p>
         </div>
-        <div class="bg-white p-5 rounded shadow min-w-0"
-             id="net-position-card"
-             data-standard="{{ depot_net_profit.net_profit }}"
-             data-rebate-based="{{ depot_net_profit.net_profit_rebate_based }}">
-            <div class="flex items-center justify-between gap-2">
-                <p class="text-sm text-gray-500" id="net-position-label">Net Profit</p>
-                <button type="button" id="net-position-toggle"
-                        class="text-xs text-slate-500 hover:text-slate-800 underline shrink-0">
-                    Switch view
-                </button>
-            </div>
-            <p class="text-2xl font-semibold break-all" id="net-position-value">
+        <div class="bg-white p-5 rounded shadow min-w-0">
+            <p class="text-sm text-gray-500">Net Profit</p>
+            <p class="text-2xl font-semibold break-all {% if depot_net_profit.net_profit < 0 %}text-red-600{% else %}text-green-700{% endif %}">
                 &#8358;{{ depot_net_profit.net_profit }}
             </p>
         </div>
     </div>
-
-    <script>
-        (function () {
-            var card = document.getElementById("net-position-card");
-            if (!card) return;
-
-            var valueEl = document.getElementById("net-position-value");
-            var labelEl = document.getElementById("net-position-label");
-            var toggleBtn = document.getElementById("net-position-toggle");
-
-            var standard = card.dataset.standard;
-            var rebateBased = card.dataset.rebateBased;
-            var showingRebateBased = false;
-
-            function paint() {
-                var value = showingRebateBased ? rebateBased : standard;
-                valueEl.textContent = "\u20A6" + value;
-                valueEl.classList.toggle("text-red-600", parseFloat(value) < 0);
-                valueEl.classList.toggle("text-green-700", parseFloat(value) >= 0);
-                labelEl.textContent = showingRebateBased ? "Net Profit (rebate-based)" : "Net Profit";
-            }
-
-            toggleBtn.addEventListener("click", function () {
-                showingRebateBased = !showingRebateBased;
-                paint();
-            });
-
-            paint();
-        })();
-    </script>
 
     <h2 class="font-semibold text-lg mb-3">Sales by Product ({{ date_from }} to {{ date_to }})</h2>
     <div class="bg-white rounded shadow divide-y mb-8">
@@ -173,7 +130,7 @@
             <span class="{% if row.net_profit < 0 %}text-red-600{% else %}text-green-700{% endif %}">
                 &#8358;{{ row.net_profit }}
                 <span class="text-gray-400 font-normal">
-                    (rev &#8358;{{ row.revenue }} &middot; reb &#8358;{{ row.total_rebates }} &middot; exp &#8358;{{ row.total_expenses }}) <span class="block">rebate-based: &#8358;{{ row.net_profit_rebate_based }}</span>
+                    (reb &#8358;{{ row.total_rebates }} &middot; exp &#8358;{{ row.total_expenses }})
                 </span>
             </span>
         </div>
@@ -202,7 +159,7 @@
             <span class="{% if row.net_profit < 0 %}text-red-600{% else %}text-green-700{% endif %}">
                 &#8358;{{ row.net_profit }}
                 <span class="text-gray-400 font-normal">
-                    (rev &#8358;{{ row.revenue }} &middot; reb &#8358;{{ row.total_rebates }} &middot; exp &#8358;{{ row.total_expenses }}) <span class="block">rebate-based: &#8358;{{ row.net_profit_rebate_based }}</span>
+                    (reb &#8358;{{ row.total_rebates }} &middot; exp &#8358;{{ row.total_expenses }})
                 </span>
             </span>
         </div>

@@ -22,6 +22,9 @@ def _can_manage_operations(user):
     vehicles, salesmen, loads, and returns.
     """
 
+    if getattr(user, "role", "") == "DEPOT_OWNER":
+        return False
+
     return user.is_staff or getattr(user, "role", "") in (
         "SUPER_ADMIN", "DEPOT_MANAGER", "DEPOT_OFFICER",
     )
@@ -33,6 +36,9 @@ def _can_set_targets(user):
     management — only Depot Manager and Super Admin.
     """
 
+    if getattr(user, "role", "") == "DEPOT_OWNER":
+        return False
+
     return user.is_staff or getattr(user, "role", "") in ("SUPER_ADMIN", "DEPOT_MANAGER")
 
 
@@ -42,7 +48,7 @@ def _can_set_targets(user):
 @login_required
 def vehicle_list(request):
     vehicles = Vehicle.objects.filter(depot__in=get_visible_depots(request.user)).select_related("depot").order_by("registration_number")
-    return render(request, "operations/vehicle_list.html", {"vehicles": vehicles})
+    return render(request, "operations/vehicle_list.html", {"vehicles": vehicles, "can_manage": _can_manage_operations(request.user)})
 
 
 @login_required
@@ -210,7 +216,7 @@ def salesman_list(request):
     salesmen = VehicleSalesman.objects.filter(
         depot__in=get_visible_depots(request.user)
     ).select_related("depot", "vehicle").order_by("name")
-    return render(request, "operations/salesman_list.html", {"salesmen": salesmen})
+    return render(request, "operations/salesman_list.html", {"salesmen": salesmen, "can_manage": _can_manage_operations(request.user)})
 
 
 @login_required
@@ -263,7 +269,7 @@ def load_list(request):
     loads = VehicleLoad.objects.filter(
         depot__in=get_visible_depots(request.user)
     ).select_related("depot", "vehicle", "salesman").order_by("-load_date")
-    return render(request, "operations/load_list.html", {"loads": loads})
+    return render(request, "operations/load_list.html", {"loads": loads, "can_manage": _can_manage_operations(request.user)})
 
 
 @login_required

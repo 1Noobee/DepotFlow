@@ -8,6 +8,7 @@ from depots.models import Depot
 from operations.models import VehicleSalesman
 from core.scoping import get_visible_depots, user_can_access_depot
 from .models import Product, Supplier, StockReceipt, Promotion
+from .scoping import visible_promotions, can_edit_promotion
 from .forms import (
     ProductForm, PriceChangeForm, SupplierForm,
     StockReceiptForm, StockReceiptItemFormSet, PromotionForm,
@@ -24,6 +25,9 @@ def _can_manage_inventory(user):
     day-to-day inventory (products, suppliers, receiving stock).
     """
 
+    if getattr(user, "role", "") == "DEPOT_OWNER":
+        return False
+
     return user.is_staff or getattr(user, "role", "") in (
         "SUPER_ADMIN", "DEPOT_MANAGER", "DEPOT_OFFICER",
     )
@@ -35,6 +39,9 @@ def _can_manage_pricing(user):
     receiving, so this is deliberately stricter than
     _can_manage_inventory().
     """
+
+    if getattr(user, "role", "") == "DEPOT_OWNER":
+        return False
 
     return user.is_staff or getattr(user, "role", "") in ("SUPER_ADMIN", "DEPOT_MANAGER")
 
@@ -86,7 +93,7 @@ def stock_balance_lookup(request):
 @login_required
 def product_list(request):
     products = Product.objects.all().order_by("name")
-    return render(request, "inventory/product_list.html", {"products": products})
+    return render(request, "inventory/product_list.html", {"products": products, "can_manage": _can_manage_inventory(request.user)})
 
 
 @login_required
@@ -213,7 +220,7 @@ def change_price(request, pk):
 @login_required
 def supplier_list(request):
     suppliers = Supplier.objects.all().order_by("name")
-    return render(request, "inventory/supplier_list.html", {"suppliers": suppliers})
+    return render(request, "inventory/supplier_list.html", {"suppliers": suppliers, "can_manage": _can_manage_inventory(request.user)})
 
 
 @login_required
@@ -263,7 +270,7 @@ def stock_receipt_list(request):
         StockReceipt.objects.filter(depot__in=get_visible_depots(request.user))
         .select_related("supplier", "depot").order_by("-receipt_date")
     )
-    return render(request, "inventory/stock_receipt_list.html", {"receipts": receipts})
+    return render(request, "inventory/stock_receipt_list.html", {"receipts": receipts, "can_manage": _can_manage_inventory(request.user)})
 
 
 @login_required
@@ -312,8 +319,8 @@ def stock_receipt_create(request):
 # =========================
 @login_required
 def promotion_list(request):
-    promotions = Promotion.objects.all().order_by("-start_date")
-    return render(request, "inventory/promotion_list.html", {"promotions": promotions})
+    promotions = visible_promotions(request.user).order_by("-start_date")
+    return render(request, "inventory/promotion_list.html", {"promotions": promotions, "can_manage": _can_manage_pricing(request.user)})
 
 
 @login_required
@@ -323,7 +330,7 @@ def promotion_create(request):
         return redirect("inventory:promotion_list")
 
     if request.method == "POST":
-        form = PromotionForm(request.POST)
+        form = PromotionForm(request.POST, user=request.user)
         if form.is_valid():
             promotion = form.save(commit=False)
             promotion.created_by = request.user
@@ -332,7 +339,7 @@ def promotion_create(request):
             messages.success(request, "Promotion created.")
             return redirect("inventory:promotion_list")
     else:
-        form = PromotionForm()
+        form = PromotionForm(user=request.user)
 
     return render(request, "inventory/promotion_form.html", {"form": form, "title": "New Promotion"})
 
@@ -345,13 +352,17 @@ def promotion_update(request, pk):
         messages.error(request, "You do not have permission to edit promotions.")
         return redirect("inventory:promotion_list")
 
+    if not can_edit_promotion(request.user, promotion):
+        messages.error(request, "You do not have access to that promotion.")
+        return redirect("inventory:promotion_list")
+
     if request.method == "POST":
-        form = PromotionForm(request.POST, instance=promotion)
+        form = PromotionForm(request.POST, instance=promotion, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Promotion updated.")
             return redirect("inventory:promotion_list")
     else:
-        form = PromotionForm(instance=promotion)
+        form = PromotionForm(instance=promotion, user=request.user)
 
     return render(request, "inventory/promotion_form.html", {"form": form, "title": "Edit Promotion"})

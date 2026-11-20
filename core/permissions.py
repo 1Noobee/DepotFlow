@@ -19,6 +19,13 @@ def role_permission(*roles):
             if request.method in SAFE_METHODS:
                 return True
 
-            return request.user.is_staff or getattr(request.user, "role", "") in roles
+            role = getattr(request.user, "role", "")
+            # Depot Owner permissions are role-specific even if an account
+            # was accidentally marked as Django staff. This keeps supplier
+            # rebates and operational write APIs unavailable to owners while
+            # retaining their explicitly granted finance actions.
+            if role == "DEPOT_OWNER":
+                return role in roles
+            return request.user.is_staff or role in roles
 
     return _RolePermission

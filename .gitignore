@@ -1,7 +1,7 @@
 # Environment variables / secrets
 .env
 .env.*
-!.env.example
+.env.example
 
 # Virtual environment
 venv/
@@ -34,3 +34,10 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+# Database backups and generated project artifacts
+*.dump
+*.sql
+*.backup
+staticfiles/
+__pycache__/
+*.py[cod]

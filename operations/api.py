@@ -1,6 +1,7 @@
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 
 from core.permissions import role_permission
 from core.scoping import get_visible_depots
@@ -18,7 +19,15 @@ from .serializers import (
 _OPERATIONS_ROLES = ("SUPER_ADMIN", "DEPOT_MANAGER", "DEPOT_OFFICER")
 
 
-class VehicleViewSet(viewsets.ModelViewSet):
+class OwnerReadOnlyViewSet(viewsets.ModelViewSet):
+    """Depot Owners may read their own depot data but cannot mutate it."""
+    def get_permissions(self):
+        if getattr(self.request.user, "role", "") == "DEPOT_OWNER" and self.action in ("list", "retrieve"):
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+
+class VehicleViewSet(OwnerReadOnlyViewSet):
     serializer_class = VehicleSerializer
     permission_classes = [role_permission(*_OPERATIONS_ROLES)]
 
@@ -28,7 +37,7 @@ class VehicleViewSet(viewsets.ModelViewSet):
         ).select_related("depot").order_by("registration_number")
 
 
-class VehicleSalesmanViewSet(viewsets.ModelViewSet):
+class VehicleSalesmanViewSet(OwnerReadOnlyViewSet):
     serializer_class = VehicleSalesmanSerializer
     permission_classes = [role_permission(*_OPERATIONS_ROLES)]
 
@@ -38,7 +47,7 @@ class VehicleSalesmanViewSet(viewsets.ModelViewSet):
         ).select_related("depot", "vehicle").order_by("name")
 
 
-class VehicleLoadViewSet(viewsets.ModelViewSet):
+class VehicleLoadViewSet(OwnerReadOnlyViewSet):
     serializer_class = VehicleLoadSerializer
     permission_classes = [role_permission(*_OPERATIONS_ROLES)]
 
@@ -58,7 +67,7 @@ class VehicleLoadViewSet(viewsets.ModelViewSet):
         return Response(VehicleLoadSerializer(load).data)
 
 
-class VehicleLoadItemViewSet(viewsets.ModelViewSet):
+class VehicleLoadItemViewSet(OwnerReadOnlyViewSet):
     """
     Add/remove line items on an open vehicle load.
 
@@ -81,7 +90,7 @@ class VehicleLoadItemViewSet(viewsets.ModelViewSet):
         return queryset
 
 
-class VehicleReturnViewSet(viewsets.ModelViewSet):
+class VehicleReturnViewSet(OwnerReadOnlyViewSet):
     serializer_class = VehicleReturnSerializer
     permission_classes = [role_permission(*_OPERATIONS_ROLES)]
 

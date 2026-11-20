@@ -277,9 +277,8 @@ def get_supplier_rebate_report(depot, date_from=None, date_to=None):
 
 def get_net_profit_report(depot, date_from=None, date_to=None):
     """
-    Actual net profit for a depot over a date range: finalized sales
-    revenue/cost, plus non-reversed supplier rebates received, minus
-    non-reversed expenses.
+    Net profit under the user's business model: recognised rebates minus
+    non-reversed expenses. Sales revenue/cost remain operational metrics.
     """
 
     sales = Sale.objects.filter(vehicle_load__depot=depot, is_finalized=True)
@@ -305,14 +304,9 @@ def get_net_profit_report(depot, date_from=None, date_to=None):
         "gross_profit": gross_profit,
         "total_expenses": total_expenses,
         "total_rebates": total_rebates,
-        "net_profit": gross_profit + total_rebates - total_expenses,
-        # Alternate view: sales revenue/cost aren't considered at all here.
-        # Rebates ARE treated as the business's profit, so this is simply
-        # what came back from suppliers minus what was spent running the
-        # depot in the period. Shown alongside the standard figure above
-        # so the person viewing the report can switch between the two,
-        # not as a replacement for it.
-        "net_profit_rebate_based": total_rebates - total_expenses,
+        # Business rule: NBC rebates actually received are the sole source of
+        # profit. Sales turnover and gross margin are operational figures only.
+        "net_profit": total_rebates - total_expenses,
     }
 
 

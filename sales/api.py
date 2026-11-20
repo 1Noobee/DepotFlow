@@ -1,6 +1,7 @@
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 
 from core.permissions import role_permission
 from core.scoping import get_visible_depots
@@ -11,7 +12,15 @@ from .serializers import CustomerSerializer, SaleSerializer, SaleItemSerializer
 _SALES_ROLES = ("SUPER_ADMIN", "DEPOT_MANAGER", "DEPOT_OFFICER", "SALESMAN")
 
 
-class CustomerViewSet(viewsets.ModelViewSet):
+class OwnerReadOnlyViewSet(viewsets.ModelViewSet):
+    """Depot Owners may read their own depot data but cannot mutate it."""
+    def get_permissions(self):
+        if getattr(self.request.user, "role", "") == "DEPOT_OWNER" and self.action in ("list", "retrieve"):
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+
+class CustomerViewSet(OwnerReadOnlyViewSet):
     serializer_class = CustomerSerializer
     permission_classes = [role_permission(*_SALES_ROLES)]
 
@@ -21,7 +30,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
         ).select_related("depot").order_by("name")
 
 
-class SaleViewSet(viewsets.ModelViewSet):
+class SaleViewSet(OwnerReadOnlyViewSet):
     serializer_class = SaleSerializer
     permission_classes = [role_permission(*_SALES_ROLES)]
 
@@ -41,7 +50,7 @@ class SaleViewSet(viewsets.ModelViewSet):
         return Response(SaleSerializer(sale).data)
 
 
-class SaleItemViewSet(viewsets.ModelViewSet):
+class SaleItemViewSet(OwnerReadOnlyViewSet):
     """
     Add/remove line items on a not-yet-finalized sale. Filter by
     ?sale=<id>. Load-reconciliation (sold + returned <= loaded) and

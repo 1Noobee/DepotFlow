@@ -5,9 +5,9 @@
     <h1 class="text-2xl font-semibold">Vehicle Loads</h1>
     <div class="flex items-center gap-3">
         <a href="{% url 'operations:vehicle_list' %}" class="text-sm text-slate-600 hover:underline">Vehicles</a>
-        <a href="{% url 'operations:load_create' %}" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
+        {% if can_manage %}<a href="{% url 'operations:load_create' %}" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
             New Vehicle Load
-        </a>
+        </a>{% endif %}
     </div>
 </div>
 

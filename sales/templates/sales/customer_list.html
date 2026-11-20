@@ -5,9 +5,9 @@
     <h1 class="text-2xl font-semibold">Customers</h1>
     <div class="flex items-center gap-3">
         <a href="{% url 'sales:sale_list' %}" class="text-sm text-slate-600 hover:underline">Sales</a>
-        <a href="{% url 'sales:customer_create' %}" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
+        {% if can_manage %}<a href="{% url 'sales:customer_create' %}" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
             New Customer
-        </a>
+        </a>{% endif %}
     </div>
 </div>
 
@@ -23,7 +23,7 @@
             <span class="text-sm {% if customer.is_active %}text-green-700{% else %}text-gray-400{% endif %}">
                 {% if customer.is_active %}Active{% else %}Inactive{% endif %}
             </span>
-            <a href="{% url 'sales:customer_update' customer.pk %}" class="text-sm text-slate-600 hover:underline">Edit</a>
+            {% if can_manage %}<a href="{% url 'sales:customer_update' customer.pk %}" class="text-sm text-slate-600 hover:underline">Edit</a>{% endif %}
         </div>
     </div>
     {% empty %}

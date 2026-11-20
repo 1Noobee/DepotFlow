@@ -13,9 +13,11 @@ from .serializers import (
 )
 
 # Matches finance.views._can_record_expenses.
-_RECORD_EXPENSE_ROLES = ("SUPER_ADMIN", "DEPOT_MANAGER", "DEPOT_OFFICER")
+_RECORD_EXPENSE_ROLES = ("SUPER_ADMIN", "DEPOT_OWNER", "DEPOT_MANAGER", "DEPOT_OFFICER")
 # Matches finance.views._can_approve_finance.
-_APPROVE_FINANCE_ROLES = ("SUPER_ADMIN", "DEPOT_MANAGER", "FINANCE_OFFICER")
+_APPROVE_FINANCE_ROLES = ("SUPER_ADMIN", "DEPOT_OWNER", "DEPOT_MANAGER", "FINANCE_OFFICER")
+# Supplier rebates deliberately remain unavailable to Depot Owner.
+_REBATE_ROLES = ("SUPER_ADMIN", "DEPOT_MANAGER", "FINANCE_OFFICER")
 
 
 class ExpenseCategoryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -60,6 +62,14 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     serializer_class = ExpenseSerializer
     permission_classes = [role_permission(*_RECORD_EXPENSE_ROLES)]
     http_method_names = ["get", "post", "head", "options"]
+
+    def get_permissions(self):
+        # Reading is available to every authenticated user and remains
+        # depot-scoped by get_queryset(); creating stays on the stricter
+        # expense-recording role set. approve/reverse use their decorators.
+        if self.action in ("list", "retrieve"):
+            return [IsAuthenticated()]
+        return super().get_permissions()
 
     def get_queryset(self):
         return Expense.objects.filter(
@@ -110,8 +120,13 @@ class SupplierRebateViewSet(viewsets.ModelViewSet):
     """No PUT/PATCH/DELETE — see ExpenseViewSet docstring; reverse() is the only correction path."""
 
     serializer_class = SupplierRebateSerializer
-    permission_classes = [role_permission(*_APPROVE_FINANCE_ROLES)]
+    permission_classes = [role_permission(*_REBATE_ROLES)]
     http_method_names = ["get", "post", "head", "options"]
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [IsAuthenticated()]
+        return super().get_permissions()
 
     def get_queryset(self):
         return SupplierRebate.objects.filter(

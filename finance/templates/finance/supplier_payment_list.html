@@ -3,9 +3,9 @@
 {% block content %}
 <div class="flex items-center justify-between mb-6">
     <h1 class="text-2xl font-semibold">Supplier Payments</h1>
-    <a href="{% url 'finance:supplier_payment_create' %}" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
+    {% if can_record %}<a href="{% url 'finance:supplier_payment_create' %}" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
         New Supplier Payment
-    </a>
+    </a>{% endif %}
 </div>
 
 <div class="bg-white rounded shadow divide-y">

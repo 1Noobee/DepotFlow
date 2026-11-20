@@ -1,7 +1,7 @@
 from django import forms
 from django.forms import inlineformset_factory
 
-from core.scoping import get_default_depot, get_visible_depots
+from core.scoping import get_default_depot, get_visible_depots, is_unrestricted
 from .models import Product, Supplier, StockReceipt, StockReceiptItem, Promotion
 
 
@@ -39,6 +39,12 @@ class SupplierForm(forms.ModelForm):
         model = Supplier
         fields = ["name", "contact_person", "phone", "email", "address", "is_active"]
 
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+        if name.casefold() != "nbc":
+            raise forms.ValidationError("NBC is the only supplier for new operational records. Existing historical supplier records are retained.")
+        return "NBC"
+
 
 class StockReceiptForm(forms.ModelForm):
     """
@@ -51,6 +57,9 @@ class StockReceiptForm(forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        # NBC is the only supplier for new operational receipts. Other supplier
+        # rows are retained for historical records and reporting.
+        self.fields["supplier"].queryset = Supplier.objects.filter(name__iexact="NBC", is_active=True)
         if user is not None:
             self.fields["depot"].queryset = get_visible_depots(user)
             default_depot = get_default_depot(user)
@@ -62,7 +71,7 @@ class StockReceiptForm(forms.ModelForm):
 StockReceiptItemFormSet = inlineformset_factory(
     StockReceipt,
     StockReceiptItem,
-    fields=["product", "quantity", "cost_price"],
+    fields=["product", "quantity", "cost_price", "rebate_landing_cost"],
     extra=1,
     can_delete=True,
 )
@@ -80,3 +89,21 @@ class PromotionForm(forms.ModelForm):
         widgets = {
             "products": forms.SelectMultiple(attrs={"size": 8}),
         }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user is None:
+            return
+
+        self.fields["depot"].queryset = get_visible_depots(user)
+
+        # A blank depot means a company-wide promotion. Only unrestricted
+        # users may create/keep those; everyone else must pick (or is
+        # auto-assigned) one of their own depots.
+        if not is_unrestricted(user):
+            self.fields["depot"].required = True
+            self.fields["depot"].empty_label = None
+            default_depot = get_default_depot(user)
+            if default_depot is not None:
+                self.fields["depot"].initial = default_depot.pk
+                self.fields["depot"].widget = forms.HiddenInput()

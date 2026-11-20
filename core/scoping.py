@@ -60,7 +60,12 @@ def get_default_depot(user):
 
 def is_unrestricted(user):
     """Super Admin (or Django staff) — no scoping applies at all."""
-    return bool(user.is_staff or _role(user) == "SUPER_ADMIN")
+    role = _role(user)
+    # Scoped managerial roles must remain scoped even if an account was
+    # accidentally marked as Django staff.
+    if role in ("TERRITORY_MANAGER", "DEPOT_OWNER"):
+        return False
+    return bool(user.is_staff or role == "SUPER_ADMIN")
 
 
 def get_visible_depots(user):
