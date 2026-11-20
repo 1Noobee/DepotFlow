@@ -2,6 +2,7 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
+from django.http import HttpResponseForbidden
 from django.utils import timezone
 from core.scoping import get_visible_depots, user_can_access_depot
 from depots.models import Depot
@@ -25,6 +26,11 @@ def _can_manage_profitability(user):
 
 @login_required
 def dashboard(request):
+    # Depot Owners must not access NBC rebate records or dashboard data, even
+    # if their account also has Django's is_staff flag enabled.
+    if getattr(request.user, 'role', '') == 'DEPOT_OWNER':
+        return HttpResponseForbidden('You do not have permission to view NBC rebates.')
+
     depots = get_visible_depots(request.user)
     checks = MonthlyHealthCheck.objects.filter(depot__in=depots).select_related('depot')[:24]
     placements = NBCQuarterlyPlacement.objects.filter(depot__in=depots).select_related('depot')[:24]
