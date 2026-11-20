@@ -62,3 +62,19 @@ class RebateRolePolicyTests(SimpleTestCase):
 
         self.assertFalse(_can_manage(SimpleNamespace(role='DEPOT_OWNER', is_staff=True)))
         self.assertTrue(_can_manage(SimpleNamespace(role='DEPOT_MANAGER', is_staff=False)))
+
+
+class PlacementPermissionTests(SimpleTestCase):
+    def test_only_depot_manager_and_above_can_manage_placements(self):
+        from types import SimpleNamespace
+        from .views import _can_manage_placements
+
+        for role in ('DEPOT_MANAGER', 'DEPOT_OFFICER', 'TERRITORY_MANAGER', 'SUPER_ADMIN'):
+            self.assertTrue(_can_manage_placements(SimpleNamespace(role=role, is_superuser=False)))
+        for role in ('DEPOT_OWNER', 'FINANCE_OFFICER', 'SALESMAN', 'VIEWER'):
+            self.assertFalse(_can_manage_placements(SimpleNamespace(role=role, is_superuser=False)))
+
+    def test_staff_flag_does_not_grant_depot_owner_placement_access(self):
+        from types import SimpleNamespace
+        from .views import _can_manage_placements
+        self.assertFalse(_can_manage_placements(SimpleNamespace(role='DEPOT_OWNER', is_staff=True, is_superuser=False)))

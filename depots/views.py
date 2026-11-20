@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
+from django.db import transaction
 
 from core.scoping import get_visible_depots, get_visible_territories, user_can_access_depot
 from .models import Territory, Depot
@@ -100,6 +101,7 @@ def depot_detail(request, pk):
 
 
 @login_required
+@transaction.atomic
 def depot_create(request):
     if not _can_manage_depots(request.user):
         messages.error(request, "You do not have permission to create depots.")
@@ -114,6 +116,10 @@ def depot_create(request):
                 # crafted request bypasses the rendered form.
                 depot.territory_id = request.user.territory_id
             depot.save()
+            initial_category = form.cleaned_data.get('initial_nbc_category')
+            if initial_category:
+                from rebates.services import assign_initial_placement
+                assign_initial_placement(depot, initial_category, request.user, form.cleaned_data.get('initial_nbc_reason', '').strip())
             messages.success(request, "Depot created.")
             return redirect("depots:depot_list")
     else:

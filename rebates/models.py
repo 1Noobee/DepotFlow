@@ -24,6 +24,15 @@ class NBCQuarterlyPlacement(TimeStampedModel):
     calculated_at = models.DateTimeField(default=timezone.now)
     calculated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     notes = models.TextField(blank=True)
+    # year/quarter identify the quarter in which this placement is effective.
+    assessment_year = models.PositiveSmallIntegerField(null=True, blank=True)
+    assessment_quarter = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(4)])
+    calculated_category = models.CharField(max_length=12, choices=Category.choices, null=True, blank=True)
+    is_initial = models.BooleanField(default=False)
+    is_manual_initial = models.BooleanField(default=False)
+    reason = models.TextField(blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_nbc_placements')
 
     class Meta:
         ordering = ['-year', '-quarter', 'depot__name']

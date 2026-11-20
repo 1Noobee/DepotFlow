@@ -89,6 +89,10 @@ class LandingCostTests(TestCase):
         self.assertEqual(parse_litres("1.0 PET X12"), Decimal("1.0"))
         # NBC workbook lists 401 PET as 0.4L and calculates excise on 0.4L.
         self.assertEqual(parse_litres("401 PET X12 SCHWEPPES BITTER LEMON"), Decimal("0.4"))
+        self.assertEqual(parse_litres("Monster 500ml X12"), Decimal("0.5"))
+        self.assertEqual(parse_litres("Predator 400ml X12"), Decimal("0.4"))
+        self.assertEqual(parse_litres("Monster Energy 44cl X24"), Decimal("0.44"))
+        self.assertIsNone(parse_litres("Unrelated 2024 product"))
 
     def test_product_volume_and_pack_size_are_authoritative(self):
         product = SimpleNamespace(name="500 RGB X24 Cola", volume="330 ml", pack_size=12)

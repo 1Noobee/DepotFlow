@@ -23,8 +23,22 @@ def extract_pack_size(text):
     return int(match.group(1)) if match else 1
 
 def extract_volume(text):
-    match = re.search(r"(\d+(\.\d+)?\s?(CL|L))", text.upper())
+    text = str(text or "").upper()
+    # Prefer explicit volume units anywhere in the description, including
+    # names such as "Monster 500ml X12" and "Predator 400ml X12".
+    match = re.search(r"(?<![A-Z0-9.])(\d+(?:\.\d+)?)\s*(ML|CL|L)\b", text)
+    if match:
+        return f"{match.group(1)} {match.group(2)}"
+
+    # Legacy NBC catalogue token: 401 PET is calculated as 0.4 litres.
+    match = re.match(r"^\s*(401)(?:\s|$)", text)
+    if match:
+        return "0.4 L"
+
+    # Preserve existing leading no-unit catalogue formats.
+    match = re.match(r"^\s*(\d+(?:\.\d+)?)\b", text)
     return match.group(1) if match else ""
+
 
 def extract_category(text):
     text = text.upper()

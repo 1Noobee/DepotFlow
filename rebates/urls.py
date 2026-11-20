@@ -6,4 +6,6 @@ urlpatterns = [
     path('health-checks/new/', views.health_check_create, name='health_check_create'),
     path('profitability/manage/', views.profitability_update, name='profitability_update'),
     path('calculate/', views.calculate, name='calculate'),
+    path('placement/initial/', views.initial_placement, name='initial_placement'),
+    path('placement/assess/', views.assess_quarter, name='assess_quarter'),
 ]

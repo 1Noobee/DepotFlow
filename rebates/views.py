@@ -8,14 +8,21 @@ from core.scoping import get_visible_depots, user_can_access_depot
 from depots.models import Depot
 from .forms import MonthlyHealthCheckForm, MonthlyProfitabilityForm
 from .models import MonthlyHealthCheck, NBCQuarterlyPlacement, MonthlyRebateAccrual, MonthlyProfitability
-from .services import calculate_quarterly_placement, calculate_monthly_rebates
+from .services import calculate_quarterly_placement, calculate_monthly_rebates, assign_initial_placement
 
 
 def _can_manage(user):
     # Depot Owner restrictions take precedence over Django staff flags.
     if getattr(user, 'role', '') == 'DEPOT_OWNER':
         return False
-    return user.is_staff or getattr(user, 'role', '') in ('SUPER_ADMIN', 'DEPOT_MANAGER', 'FINANCE_OFFICER')
+    return bool(getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False) or getattr(user, 'role', '') in ('SUPER_ADMIN', 'DEPOT_MANAGER', 'DEPOT_OFFICER', 'FINANCE_OFFICER'))
+
+
+def _can_manage_placements(user):
+    # Depot Owner restrictions take precedence over staff/superuser flags.
+    if getattr(user, 'role', '') == 'DEPOT_OWNER':
+        return False
+    return bool(getattr(user, 'is_superuser', False) or getattr(user, 'role', '') in ('DEPOT_MANAGER', 'DEPOT_OFFICER', 'TERRITORY_MANAGER', 'SUPER_ADMIN'))
 
 
 def _can_manage_profitability(user):
@@ -47,6 +54,7 @@ def dashboard(request):
         'latest_checks_by_depot': latest_checks_by_depot.values(),
         'can_manage': _can_manage(request.user),
         'can_manage_profitability': _can_manage_profitability(request.user),
+        'can_manage_placements': _can_manage_placements(request.user),
         'visible_depots': depots,
         'now': timezone.localdate(),
     })
@@ -81,9 +89,8 @@ def calculate(request):
         depot = Depot.objects.get(pk=request.POST.get('depot'), pk__in=get_visible_depots(request.user).values('pk'))
         year, month = int(request.POST.get('year')), int(request.POST.get('month'))
         if month < 1 or month > 12: raise ValueError('Month must be between 1 and 12.')
-        calculate_quarterly_placement(depot, year, ((month - 1) // 3) + 1, request.user)
         calculate_monthly_rebates(depot, year, month, request.user)
-        messages.success(request, 'Quarterly placement and monthly rebate estimates have been recalculated from NBC purchase records.')
+        messages.success(request, 'Monthly rebate estimates have been calculated using the placement effective for that quarter. Placement is assessed separately at quarter-end.')
     except (ValueError, Depot.DoesNotExist) as exc:
         messages.error(request, str(exc) or 'Select an accessible depot and valid period.')
     return redirect('rebates:dashboard')
@@ -136,3 +143,32 @@ def profitability_update(request):
         else:
             form = MonthlyProfitabilityForm(initial=initial, user=request.user)
     return render(request, 'rebates/profitability_form.html', {'form': form})
+
+
+@login_required
+def initial_placement(request):
+    from .services import assign_initial_placement
+    from django.core.exceptions import PermissionDenied, ValidationError
+    if request.method != 'POST':
+        return redirect('rebates:dashboard')
+    try:
+        depot = Depot.objects.get(pk=request.POST.get('depot'), pk__in=get_visible_depots(request.user).values('pk'))
+        assign_initial_placement(depot, request.POST.get('category'), request.user, request.POST.get('reason', '').strip())
+        messages.success(request, 'Initial NBC placement recorded. Manual placement is now locked for this depot.')
+    except (Depot.DoesNotExist, ValueError, ValidationError, PermissionDenied) as exc:
+        messages.error(request, str(exc) or 'Unable to assign initial placement.')
+    return redirect('rebates:dashboard')
+
+
+@login_required
+def assess_quarter(request):
+    from django.core.exceptions import PermissionDenied, ValidationError
+    if request.method != 'POST' or not _can_manage_placements(request.user):
+        return HttpResponseForbidden('Only Depot Manager and above may run quarter-end placement assessments.')
+    try:
+        depot = Depot.objects.get(pk=request.POST.get('depot'), pk__in=get_visible_depots(request.user).values('pk'))
+        placement = calculate_quarterly_placement(depot, int(request.POST.get('year')), int(request.POST.get('quarter')), request.user)
+        messages.success(request, f'{placement.get_category_display()} placement recorded for {placement.year} Q{placement.quarter}.')
+    except (Depot.DoesNotExist, TypeError, ValueError, ValidationError, PermissionDenied) as exc:
+        messages.error(request, str(exc) or 'Unable to assess quarter-end placement.')
+    return redirect('rebates:dashboard')

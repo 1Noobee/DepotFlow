@@ -31,32 +31,33 @@ def _money(value):
 
 
 def parse_litres(value):
-    """Convert a product volume (or legacy product-name prefix) to litres.
+    """Convert a product volume (or legacy product-name size) to litres.
 
-    Explicit ML/CL/L units are honoured. Without a unit, values below 10 are
-    treated as litres and larger values as millilitres, matching the existing
-    catalogue conventions. The legacy NBC token 401 means 0.4L.
+    Explicit ML/CL/L sizes may occur anywhere in a product description,
+    e.g. "Monster 500ml X12". If no unit is present, only a leading numeric
+    token is treated as a size, preserving legacy catalogue conventions.
+    The NBC token "401 PET" represents 0.4L.
     """
     text = str(value or "").strip().upper()
-    match = re.match(r"^(\d+(?:\.\d+)?)\s*(CL|ML|L)?\b", text)
+
+    # Prefer explicit units anywhere in the product name/specification.
+    match = re.search(r"(?<![A-Z0-9.])(\d+(?:\.\d+)?)\s*(CL|ML|L)\b", text)
+    if match:
+        amount = Decimal(match.group(1))
+        unit = match.group(2)
+        if unit == "CL":
+            return amount / 100
+        if unit == "ML":
+            return amount / 1000
+        return amount
+
+    # Legacy no-unit sizes are accepted only at the beginning.
+    match = re.match(r"^(\d+(?:\.\d+)?)(?:\s|$)", text)
     if not match:
         return None
     amount = Decimal(match.group(1))
-    unit = match.group(2)
-
-    # A legacy NBC SKU typo appears in the source workbook as "401 PET";
-    # its excise formula explicitly uses 0.4 litres per bottle. Treat this
-    # exact product-size token as 400 ml rather than 401 ml.
-    if amount == Decimal("401") and unit is None:
+    if amount == Decimal("401"):
         return Decimal("0.4")
-
-    if unit == "CL":
-        return amount / 100
-    if unit == "ML":
-        return amount / 1000
-    if unit == "L":
-        return amount
-    # No unit written: small numbers are litres (1.0, 1.5), big ones are ml (500, 330).
     return amount if amount < 10 else amount / 1000
 
 

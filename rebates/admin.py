@@ -5,7 +5,7 @@ from .models import NBCQuarterlyPlacement, MonthlyRebateAccrual, MonthlyHealthCh
 class NBCQuarterlyPlacementAdmin(admin.ModelAdmin):
     list_display = ('depot', 'year', 'quarter', 'qualifying_cases', 'category', 'calculated_at')
     list_filter = ('year', 'quarter', 'category', 'depot')
-    readonly_fields = ('calculated_at',)
+    readonly_fields = ('depot', 'year', 'quarter', 'qualifying_cases', 'category', 'calculated_at', 'calculated_by', 'assessment_year', 'assessment_quarter', 'calculated_category', 'is_initial', 'is_manual_initial', 'reason', 'approved_at', 'approved_by', 'notes')
 
 @admin.register(MonthlyRebateAccrual)
 class MonthlyRebateAccrualAdmin(admin.ModelAdmin):
