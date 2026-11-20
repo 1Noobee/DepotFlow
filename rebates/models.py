@@ -259,20 +259,27 @@ class MonthlyProfitability(TimeStampedModel):
         ).first()
 
     @property
-    def previous_health_check(self):
+    def reinvestment_baseline_health_check(self):
+        """Health check at the end of the profit month; this is the baseline."""
+        return self.health_check
+
+    @property
+    def reinvestment_followup_health_check(self):
+        """The next calendar month's health check measures the reinvestment."""
+        next_year = self.year + (1 if self.month == 12 else 0)
+        next_month = 1 if self.month == 12 else self.month + 1
         return MonthlyHealthCheck.objects.filter(
-            depot=self.depot,
-        ).filter(
-            Q(year__lt=self.year) | Q(year=self.year, month__lt=self.month)
-        ).order_by('-year', '-month').first()
+            depot=self.depot, year=next_year, month=next_month
+        ).first()
 
     @property
     def working_capital_change(self):
-        current = self.health_check
-        previous = self.previous_health_check
-        if current is None or previous is None:
+        """Change from the profit month's close to the following month's close."""
+        baseline = self.reinvestment_baseline_health_check
+        followup = self.reinvestment_followup_health_check
+        if baseline is None or followup is None:
             return None
-        return current.total_working_capital - previous.total_working_capital
+        return followup.total_working_capital - baseline.total_working_capital
 
     @property
     def observed_reinvestment(self):
@@ -294,7 +301,8 @@ class MonthlyProfitability(TimeStampedModel):
 
     @property
     def is_flagged(self):
-        # Missing month-end baseline is pending, not an automatic failure.
+        # The following month's health check is required before reinvestment
+        # can be assessed; missing data is pending, not an automatic failure.
         if not self.has_working_capital_baseline:
             return False
         if self.net_profit <= 0:

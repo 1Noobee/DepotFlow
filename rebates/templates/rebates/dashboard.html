@@ -26,7 +26,7 @@
 
 <section class="mb-8">
   <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-    <div><h2 class="text-xl font-semibold">Monthly Profitability & Reinvestment</h2><p class="text-sm text-stone-600">Expected rebate comes from the existing monthly segment calculation; actual rebate comes from recorded NBC receipts. Reinvestment is inferred from the change in month-end working capital.</p></div>
+    <div><h2 class="text-xl font-semibold">Monthly Profitability & Reinvestment</h2><p class="text-sm text-stone-600">Expected rebate comes from the existing monthly segment calculation; actual rebate comes from recorded NBC receipts. Reinvestment is assessed at the end of the following month by comparing its health check with the profit month’s closing health check.</p></div>
     {% if can_manage_profitability %}<a class="rounded-md bg-depot-teal px-4 py-2 text-white font-semibold" href="{% url 'rebates:profitability_update' %}">+ Set CM reinvestment target</a>{% endif %}
   </div>
   <div class="overflow-x-auto bg-white border rounded-xl">
@@ -42,17 +42,17 @@
         <td class="p-3 text-right font-semibold">₦{{ p.net_profit|floatformat:2 }}</td>
         <td class="p-3 text-right">{{ p.target_reinvestment_percent|floatformat:2 }}%</td>
         <td class="p-3 text-right">₦{{ p.required_reinvestment|floatformat:2 }}</td>
-        <td class="p-3 text-right">{% if p.has_working_capital_baseline %}₦{{ p.working_capital_change|floatformat:2 }}{% if p.actual_reinvestment_percent != None %}<div class="text-stone-500">{{ p.actual_reinvestment_percent|floatformat:2 }}% of net profit</div>{% endif %}{% else %}<span class="text-stone-500">Awaiting health checks</span>{% endif %}</td>
-        <td class="p-3">{% if not p.has_working_capital_baseline %}<span class="inline-flex rounded-full bg-amber-100 px-2 py-1 text-amber-800 font-semibold">Pending baseline</span><div class="text-xs text-amber-700 mt-1">Need current and previous month-end health checks</div>{% elif p.is_flagged %}<span class="inline-flex rounded-full bg-red-100 px-2 py-1 text-red-800 font-semibold">Flagged</span><div class="text-xs text-red-700 mt-1">{% if p.net_profit <= 0 %}No positive net profit{% else %}Below reinvestment target{% endif %}</div>{% else %}<span class="inline-flex rounded-full bg-green-100 px-2 py-1 text-green-800 font-semibold">On target</span>{% endif %}</td>
+        <td class="p-3 text-right">{% if p.has_working_capital_baseline %}₦{{ p.working_capital_change|floatformat:2 }}{% if p.actual_reinvestment_percent != None %}<div class="text-stone-500">{{ p.actual_reinvestment_percent|floatformat:2 }}% of net profit</div>{% endif %}{% else %}<span class="text-stone-500">Awaiting following-month health check</span>{% endif %}</td>
+        <td class="p-3">{% if not p.has_working_capital_baseline %}<span class="inline-flex rounded-full bg-amber-100 px-2 py-1 text-amber-800 font-semibold">Pending baseline</span><div class="text-xs text-amber-700 mt-1">Need profit-month and following-month health checks</div>{% elif p.is_flagged %}<span class="inline-flex rounded-full bg-red-100 px-2 py-1 text-red-800 font-semibold">Flagged</span><div class="text-xs text-red-700 mt-1">{% if p.net_profit <= 0 %}No positive net profit{% else %}Below reinvestment target{% endif %}</div>{% else %}<span class="inline-flex rounded-full bg-green-100 px-2 py-1 text-green-800 font-semibold">On target</span>{% endif %}</td>
         {% if can_manage_profitability %}<td class="p-3"><a class="text-depot-teal font-semibold" href="{% url 'rebates:profitability_update' %}?depot={{ p.depot_id }}&year={{ p.year }}&month={{ p.month }}">Update</a></td>{% endif %}
       </tr>
       {% empty %}
-      <tr><td class="p-4 text-stone-500" colspan="{% if can_manage_profitability %}10{% else %}9{% endif %}">No month-end profitability reviews recorded yet.{% if can_manage_profitability %} Set a target percentage; working-capital change will be calculated from monthly health checks.{% endif %}</td></tr>
+      <tr><td class="p-4 text-stone-500" colspan="{% if can_manage_profitability %}10{% else %}9{% endif %}">No month-end profitability reviews recorded yet.{% if can_manage_profitability %} Set a target percentage; following-month working-capital change will be calculated from monthly health checks.{% endif %}</td></tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
-  <p class="text-xs text-stone-500 mt-2">Only the Commercial Manager can set reinvestment targets. Expected rebates come from existing monthly segment calculations; actual rebates come from NBC rebate receipts recorded in Finance. Reinvestment is inferred as the positive month-to-month change in total working capital. A depot is flagged when net profit is zero/negative or that increase is below the required percentage of net profit. A missing previous health check is shown as pending baseline.</p>
+  <p class="text-xs text-stone-500 mt-2">Only the Commercial Manager can set reinvestment targets. Expected rebates come from existing monthly segment calculations; actual rebates come from NBC rebate receipts recorded in Finance. Reinvestment is assessed as the positive change in total working capital from the profit month-end health check to the following month-end health check. A depot is flagged when net profit is zero/negative or that increase is below the required percentage of net profit. A missing profit-month or following-month health check is shown as pending.</p>
 </section>
 
 {% if can_manage %}
