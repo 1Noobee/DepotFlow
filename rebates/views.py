@@ -2,7 +2,6 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
-from django.http import HttpResponseForbidden
 from django.utils import timezone
 from core.scoping import get_visible_depots, user_can_access_depot
 from depots.models import Depot
@@ -11,20 +10,21 @@ from .models import MonthlyHealthCheck, NBCQuarterlyPlacement, MonthlyRebateAccr
 from .services import calculate_quarterly_placement, calculate_monthly_rebates
 
 
-def _is_depot_owner(user):
-    return getattr(user, 'role', '') == 'DEPOT_OWNER'
-
-
 def _can_manage(user):
-    if _is_depot_owner(user):
+    # Depot Owner restrictions take precedence over Django staff flags.
+    if getattr(user, 'role', '') == 'DEPOT_OWNER':
         return False
     return user.is_staff or getattr(user, 'role', '') in ('SUPER_ADMIN', 'DEPOT_MANAGER', 'FINANCE_OFFICER')
 
+
+def _can_manage_profitability(user):
+    # Reinvestment targets are a Commercial Manager control; Super Admin
+    # retains unrestricted oversight. Depot Owner/staff flags do not bypass it.
+    role = getattr(user, 'role', '')
+    return bool(getattr(user, 'is_superuser', False) or role in ('SUPER_ADMIN', 'TERRITORY_MANAGER'))
+
 @login_required
 def dashboard(request):
-    if _is_depot_owner(request.user):
-        return HttpResponseForbidden('Depot Owners do not have access to NBC rebates or health checks.')
-
     depots = get_visible_depots(request.user)
     checks = MonthlyHealthCheck.objects.filter(depot__in=depots).select_related('depot')[:24]
     placements = NBCQuarterlyPlacement.objects.filter(depot__in=depots).select_related('depot')[:24]
@@ -40,7 +40,7 @@ def dashboard(request):
         'profitability_records': profitability_records,
         'latest_checks_by_depot': latest_checks_by_depot.values(),
         'can_manage': _can_manage(request.user),
-        'can_manage_profitability': (not _is_depot_owner(request.user)) and (request.user.is_staff or getattr(request.user, 'role', '') in ('SUPER_ADMIN', 'DEPOT_MANAGER', 'TERRITORY_MANAGER')),
+        'can_manage_profitability': _can_manage_profitability(request.user),
         'visible_depots': depots,
         'now': timezone.localdate(),
     })
@@ -87,8 +87,8 @@ def calculate(request):
 def profitability_update(request):
     # Distribution Manager and every management level above it may set
     # depot reinvestment targets.
-    if _is_depot_owner(request.user) or not (request.user.is_staff or getattr(request.user, 'role', '') in ('SUPER_ADMIN', 'DEPOT_MANAGER', 'TERRITORY_MANAGER')):
-        messages.error(request, 'Only the Distribution Manager and management above can manage reinvestment targets.')
+    if not _can_manage_profitability(request.user):
+        messages.error(request, 'Only the Commercial Manager and Super Admin can manage reinvestment targets.')
         return redirect('rebates:dashboard')
 
     if request.method == 'POST':

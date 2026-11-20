@@ -43,3 +43,22 @@ class HealthCheckFormulaTests(SimpleTestCase):
         self.assertEqual(check.operator_owned_working_capital, Decimal('82287392'))
         self.assertEqual(round(check.operator_equity_percent), 105)
         self.assertIsNone(check.nbc_credit_utilization_percent)
+
+
+class RebateRolePolicyTests(SimpleTestCase):
+    def test_only_commercial_manager_and_super_admin_manage_reinvestment_targets(self):
+        from types import SimpleNamespace
+        from .views import _can_manage_profitability
+
+        self.assertTrue(_can_manage_profitability(SimpleNamespace(role='TERRITORY_MANAGER', is_staff=False, is_superuser=False)))
+        self.assertTrue(_can_manage_profitability(SimpleNamespace(role='SUPER_ADMIN', is_staff=False, is_superuser=False)))
+        self.assertFalse(_can_manage_profitability(SimpleNamespace(role='DEPOT_MANAGER', is_staff=True, is_superuser=False)))
+        self.assertFalse(_can_manage_profitability(SimpleNamespace(role='DEPOT_OWNER', is_staff=True, is_superuser=False)))
+        self.assertFalse(_can_manage_profitability(SimpleNamespace(role='FINANCE_OFFICER', is_staff=True, is_superuser=False)))
+
+    def test_depot_owner_staff_flag_cannot_submit_health_checks(self):
+        from types import SimpleNamespace
+        from .views import _can_manage
+
+        self.assertFalse(_can_manage(SimpleNamespace(role='DEPOT_OWNER', is_staff=True)))
+        self.assertTrue(_can_manage(SimpleNamespace(role='DEPOT_MANAGER', is_staff=False)))
