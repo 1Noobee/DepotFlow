@@ -228,30 +228,25 @@ class VehicleReturnTests(OperationsTestCase):
         with self.assertRaises(ValidationError):
             vehicle_return.confirm_return()
 
-    def test_return_item_quantity_is_not_validated_on_plain_save(self):
-        """
-        Documents a real asymmetry worth fixing: VehicleLoadItem.save()
-        calls full_clean() so bad data can never be saved, but
-        VehicleReturnItem has no such override -- clean()'s own
-        quantity<=0 check only fires when something calls full_clean()
-        explicitly (e.g. a ModelForm), not on a plain .save()/.create().
-        In practice this is harmless today because the only creation
-        path (LoadCloseForm, via load_close) only ever submits positive
-        quantities -- but a future direct .objects.create() call
-        elsewhere would NOT be caught the way VehicleLoadItem's would.
-        """
+    def test_return_item_quantity_is_validated_on_plain_save(self):
+        """Direct ORM writes must enforce the same positive-quantity rule."""
         vehicle_return = VehicleReturn.objects.create(vehicle_load=self.load)
 
-        # Does NOT raise today, even though clean() says it should:
-        bad_item = VehicleReturnItem.objects.create(
-            vehicle_return=vehicle_return, product=self.product, quantity=0, condition="GOOD",
-        )
-        self.assertEqual(bad_item.quantity, 0)
-
-        # Calling full_clean() explicitly DOES catch it, confirming the
-        # rule itself is correct -- only the automatic enforcement is missing.
         with self.assertRaises(ValidationError):
-            bad_item.full_clean()
+            VehicleReturnItem.objects.create(
+                vehicle_return=vehicle_return, product=self.product,
+                quantity=0, condition="GOOD",
+            )
+
+    def test_confirmed_return_cannot_receive_new_items(self):
+        vehicle_return = VehicleReturn.objects.create(vehicle_load=self.load)
+        vehicle_return.confirm_return()
+
+        with self.assertRaises(ValidationError):
+            VehicleReturnItem.objects.create(
+                vehicle_return=vehicle_return, product=self.product,
+                quantity=1, condition="GOOD",
+            )
 
 
 class ReconciliationAndCloseTests(OperationsTestCase):

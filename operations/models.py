@@ -681,6 +681,13 @@ class VehicleReturnItem(TimeStampedModel):
                 "Quantity must be greater than zero."
             )
 
+    def save(self, *args, **kwargs):
+        # Enforce the same validation for direct ORM writes as for ModelForms.
+        # This prevents zero/invalid quantities and edits to confirmed returns
+        # from bypassing clean() through objects.create() or instance.save().
+        self.full_clean()
+        super().save(*args, **kwargs)
+
 
 def get_current_inventory_value(depot, product):
     """
