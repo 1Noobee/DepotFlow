@@ -482,7 +482,7 @@ class StockReceiptItem(TimeStampedModel):
     @property
     def rebate_cost_breakdown(self):
         """Price, VAT, excise and landing cost worked out from cost_price."""
-        return landing_cost_breakdown(self.cost_price, self.product.name)
+        return landing_cost_breakdown(self.cost_price, self.product)
 
     @property
     def effective_rebate_landing_cost(self):

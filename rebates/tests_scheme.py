@@ -1,5 +1,6 @@
 from decimal import Decimal
 from unittest import TestCase
+from types import SimpleNamespace
 
 from rebates import scheme as s
 from inventory.landing_cost import (
@@ -41,6 +42,40 @@ class RateTests(TestCase):
                 self.assertIn(category, s.SCHEME[tier])
 
 
+class CompleteRateTableTests(TestCase):
+    """Boundary checks for every category/tier row transcribed from NBC's image."""
+
+    def test_all_rate_steps_and_boundaries(self):
+        cases = {
+            s.STANDARD: {
+                s.SPARKLING: [(0, "7.5"), (2099, "7.5"), (2100, "8.0"), (2700, "8.0"), (2701, "8.5")],
+                s.WATER: [(0, "8.0"), (399, "8.0"), (400, "8.5"), (650, "8.5"), (651, "9.0")],
+                s.JUICE: [(0, "5.5"), (69, "5.5"), (70, "6.0"), (120, "6.0"), (121, "6.5")],
+                s.MONSTER: [(0, "3.0"), (7, "3.0"), (8, "3.5"), (13, "3.5"), (14, "4.0")],
+                s.PREDATOR: [(0, "4.0"), (1049, "4.0"), (1050, "4.5"), (1350, "4.5"), (1351, "5.0")],
+            },
+            s.MAXI: {
+                s.SPARKLING: [(0, "8.0"), (2700, "8.0"), (2701, "8.5"), (10500, "8.5"), (10501, "9.0")],
+                s.WATER: [(0, "8.5"), (650, "8.5"), (651, "9.0"), (1800, "9.0"), (1801, "9.5")],
+                s.JUICE: [(0, "6.0"), (120, "6.0"), (121, "6.5"), (480, "6.5"), (481, "7.0")],
+                s.MONSTER: [(0, "3.5"), (13, "3.5"), (14, "4.0"), (33, "4.0"), (34, "4.5")],
+                s.PREDATOR: [(0, "4.5"), (1350, "4.5"), (1351, "5.0"), (5250, "5.0"), (5251, "5.5")],
+            },
+            s.MEGA: {
+                s.SPARKLING: [(0, "8.5"), (10500, "8.5"), (10501, "9.0"), (62000, "9.0"), (62001, "9.5")],
+                s.WATER: [(0, "9.0"), (1800, "9.0"), (1801, "9.5"), (9000, "9.5"), (9001, "10.0")],
+                s.JUICE: [(0, "6.5"), (480, "6.5"), (481, "7.0"), (3000, "7.0"), (3001, "7.5")],
+                s.MONSTER: [(0, "4.0"), (33, "4.0"), (34, "4.5"), (200, "4.5"), (201, "5.0")],
+                s.PREDATOR: [(0, "5.0"), (5250, "5.0"), (5251, "5.5"), (31000, "5.5"), (31001, "6.0")],
+            },
+        }
+        for tier, categories in cases.items():
+            for category, points in categories.items():
+                for volume, expected in points:
+                    with self.subTest(tier=tier, category=category, volume=volume):
+                        self.assertEqual(s.get_rate(tier, category, volume), Decimal(expected))
+
+
 class LandingCostTests(TestCase):
     def test_pack_parsing(self):
         self.assertEqual(parse_bottles_per_case("500 RGB X24 Coca Cola"), 24)
@@ -52,6 +87,40 @@ class LandingCostTests(TestCase):
         self.assertEqual(parse_litres("330 CAN 4X6"), Decimal("0.33"))
         self.assertEqual(parse_litres("44cl Monster"), Decimal("0.44"))
         self.assertEqual(parse_litres("1.0 PET X12"), Decimal("1.0"))
+        # NBC workbook lists 401 PET as 0.4L and calculates excise on 0.4L.
+        self.assertEqual(parse_litres("401 PET X12 SCHWEPPES BITTER LEMON"), Decimal("0.4"))
+
+    def test_product_volume_and_pack_size_are_authoritative(self):
+        product = SimpleNamespace(name="500 RGB X24 Cola", volume="330 ml", pack_size=12)
+        result = landing_cost_breakdown(6000, product)
+        self.assertEqual(result["excise"], Decimal("39.60"))
+        self.assertTrue(result["excise_known"])
+
+    def test_product_fields_support_common_volume_formats(self):
+        cases = [
+            ("500ml", Decimal("0.5")),
+            ("44cl", Decimal("0.44")),
+            ("1.5L", Decimal("1.5")),
+            ("330", Decimal("0.33")),
+            ("401", Decimal("0.4")),
+        ]
+        for raw_volume, expected in cases:
+            with self.subTest(volume=raw_volume):
+                product = SimpleNamespace(name="Unhelpful product label", volume=raw_volume, pack_size=24)
+                result = landing_cost_breakdown(1000, product)
+                self.assertEqual(result["excise"], expected * 24 * Decimal("10"))
+                self.assertTrue(result["excise_known"])
+
+    def test_missing_product_fields_fall_back_to_product_name(self):
+        product = SimpleNamespace(name="500 RGB X24 Cola", volume="", pack_size=None)
+        result = landing_cost_breakdown(6000, product)
+        self.assertEqual(result["excise"], Decimal("120.00"))
+        self.assertTrue(result["excise_known"])
+
+    def test_invalid_nonblank_product_specification_is_flagged(self):
+        product = SimpleNamespace(name="500 RGB X24 Cola", volume="unknown", pack_size=24)
+        result = landing_cost_breakdown(6000, product)
+        self.assertFalse(result["excise_known"])
 
     def test_workbook_examples(self):
         # price, name -> landing cost, worked out exactly as the workbook does

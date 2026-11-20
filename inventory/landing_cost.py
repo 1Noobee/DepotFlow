@@ -30,13 +30,26 @@ def _money(value):
     return Decimal(value).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
 
 
-def parse_litres(name):
-    """Litres per bottle from the leading size in a product name, or None."""
-    match = re.match(r"\s*(\d+(?:\.\d+)?)\s*(CL|ML|L)?\b", (name or "").upper())
+def parse_litres(value):
+    """Convert a product volume (or legacy product-name prefix) to litres.
+
+    Explicit ML/CL/L units are honoured. Without a unit, values below 10 are
+    treated as litres and larger values as millilitres, matching the existing
+    catalogue conventions. The legacy NBC token 401 means 0.4L.
+    """
+    text = str(value or "").strip().upper()
+    match = re.match(r"^(\d+(?:\.\d+)?)\s*(CL|ML|L)?\b", text)
     if not match:
         return None
     amount = Decimal(match.group(1))
     unit = match.group(2)
+
+    # A legacy NBC SKU typo appears in the source workbook as "401 PET";
+    # its excise formula explicitly uses 0.4 litres per bottle. Treat this
+    # exact product-size token as 400 ml rather than 401 ml.
+    if amount == Decimal("401") and unit is None:
+        return Decimal("0.4")
+
     if unit == "CL":
         return amount / 100
     if unit == "ML":
@@ -62,18 +75,38 @@ def parse_bottles_per_case(name):
     return None
 
 
-def landing_cost_breakdown(price, product_name):
-    """
-    Returns the price, VAT, excise and landing cost for one case.
-    excise_known is False when the pack size could not be read from the
-    product name; excise is then left out and the figure should be checked.
-    """
+def landing_cost_breakdown(price, product):
+    """Return the tax and rebate landing-cost breakdown for one case.
 
+    Product.volume and Product.pack_size are authoritative. Product-name
+    parsing is retained only as a fallback for legacy/incomplete product
+    records where the corresponding specification is blank or absent.
+    Invalid nonblank specifications are not silently overridden by a name.
+    A plain string remains supported for older callers and isolated tests.
+    """
     price = Decimal(price)
     vat = price * VAT_RATE
 
-    litres = parse_litres(product_name)
-    bottles = parse_bottles_per_case(product_name)
+    if isinstance(product, str) or product is None:
+        product_name = product or ""
+        litres = parse_litres(product_name)
+        bottles = parse_bottles_per_case(product_name)
+    else:
+        product_name = getattr(product, "name", "") or ""
+        raw_volume = getattr(product, "volume", None)
+        raw_pack_size = getattr(product, "pack_size", None)
+
+        litres = parse_litres(raw_volume) if raw_volume not in (None, "") else parse_litres(product_name)
+        if raw_pack_size in (None, ""):
+            bottles = parse_bottles_per_case(product_name)
+        else:
+            try:
+                bottles = int(raw_pack_size)
+                if bottles <= 0:
+                    bottles = None
+            except (TypeError, ValueError):
+                bottles = None
+
     excise_known = litres is not None and bottles is not None
     excise = litres * bottles * EXCISE_PER_LITRE if excise_known else Decimal("0")
 
