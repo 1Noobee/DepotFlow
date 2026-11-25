@@ -20,7 +20,7 @@ from django.views.decorators.http import require_GET
 from depots.models import Depot, Territory
 from operations.models import VehicleSalesman
 from core.scoping import get_visible_depots, user_can_access_depot, user_can_access_territory, is_unrestricted
-from . import services
+from . import owner_overview, services
 
 
 def _parse_date(value):
@@ -277,6 +277,8 @@ def dashboard(request):
         context["date_to"] = date_to
 
         if user.depot_id:
+            if user.is_depot_owner:
+                context["owner_overview"] = owner_overview.get_owner_overview(user.depot, today)
             context["depot_sales"] = services.get_sales_summary_for_range(user.depot, date_from, date_to)
             context["depot_net_profit"] = services.get_net_profit_report(user.depot, date_from, date_to)
             context["salesmen_progress"] = [

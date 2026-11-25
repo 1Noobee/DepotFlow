@@ -101,7 +101,6 @@ class MonthlyHealthCheck(TimeStampedModel):
     empties_quantity = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     plastic_quantity = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     empties_value = models.DecimalField(max_digits=16, decimal_places=2, default=0)
-    bank_balance = models.DecimalField(max_digits=16, decimal_places=2, default=0, help_text='Optional memo. The NBC health-check sheet has no bank line, so this is not part of NBC total working capital; it is added only for the app\'s own month-to-month tracking.')
     notes = models.TextField(blank=True)
     completed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     completed_at = models.DateTimeField(default=timezone.now)
@@ -155,19 +154,12 @@ class MonthlyHealthCheck(TimeStampedModel):
         previous = self.previous_month_health_check
         if previous is None:
             return None
-        return self.total_working_capital_incl_bank - previous.total_working_capital_incl_bank
+        return self.total_working_capital - previous.total_working_capital
 
     @property
     def total_working_capital(self):
         # Exactly as the NBC health-check sheet: settled stock + cash + GIT / order released.
         return self.grand_total_stock_value + self.cash_at_hand + self.git_order_released
-
-    @property
-    def total_working_capital_incl_bank(self):
-        # The app's own measure for month-to-month movement (reinvestment): the NBC
-        # total plus any bank balance entered. Equal to the NBC total when no bank
-        # balance is entered.
-        return self.total_working_capital + self.bank_balance
 
     @property
     def nbc_credit_utilization_percent(self):
@@ -296,7 +288,7 @@ class MonthlyProfitability(TimeStampedModel):
         followup = self.reinvestment_followup_health_check
         if baseline is None or followup is None:
             return None
-        return followup.total_working_capital_incl_bank - baseline.total_working_capital_incl_bank
+        return followup.total_working_capital - baseline.total_working_capital
 
     @property
     def observed_reinvestment(self):

@@ -72,11 +72,11 @@ class HealthCheckFormulaTests(SimpleTestCase):
         self.assertEqual(plain.total_working_capital, with_credit.total_working_capital)
         self.assertEqual(plain.operator_owned_working_capital, with_credit.operator_owned_working_capital)
 
-    def test_bank_balance_stays_out_of_the_nbc_total_but_counts_for_month_to_month_movement(self):
-        check = MonthlyHealthCheck(grand_total_stock_value=Decimal('1000'), cash_at_hand=Decimal('500'),
-                                   bank_balance=Decimal('300'))
-        self.assertEqual(check.total_working_capital, Decimal('1500'))
-        self.assertEqual(check.total_working_capital_incl_bank, Decimal('1800'))
+    def test_there_is_no_bank_balance_on_the_health_check(self):
+        from django.core.exceptions import FieldDoesNotExist
+        with self.assertRaises(FieldDoesNotExist):
+            MonthlyHealthCheck._meta.get_field('bank_balance')
+        self.assertFalse(hasattr(MonthlyHealthCheck, 'total_working_capital_incl_bank'))
 
 
 class RebateRolePolicyTests(SimpleTestCase):

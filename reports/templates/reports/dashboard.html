@@ -7,6 +7,7 @@
 {% if depot_sales %}
     {# Depot Manager / Depot Officer: figures for their own depot over a chosen timeframe #}
     <p class="text-sm text-gray-500 mb-1">{{ request.user.depot.name }}</p>
+    {% if owner_overview %}{% include "reports/_owner_overview.html" with o=owner_overview %}{% endif %}
     {% include "partials/date_range_form.html" %}
 
     <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">

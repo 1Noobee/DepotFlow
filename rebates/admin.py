@@ -15,6 +15,6 @@ class MonthlyRebateAccrualAdmin(admin.ModelAdmin):
 
 @admin.register(MonthlyHealthCheck)
 class MonthlyHealthCheckAdmin(admin.ModelAdmin):
-    list_display = ('depot', 'year', 'month', 'bank_balance', 'grand_total_stock_value', 'credit_exposure_balance', 'completed_at')
+    list_display = ('depot', 'year', 'month', 'grand_total_stock_value', 'credit_exposure_balance', 'completed_at')
     list_filter = ('year', 'month', 'depot')
     readonly_fields = ('completed_at', 'created_at', 'updated_at')
