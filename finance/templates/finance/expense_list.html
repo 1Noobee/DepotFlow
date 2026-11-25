@@ -7,6 +7,7 @@
         <!-- <a href="{% url 'finance:supplier_payment_list' %}" class="text-sm text-slate-600 hover:underline">Supplier Payments</a>
         <a href="{% url 'finance:supplier_rebate_list' %}" class="text-sm text-slate-600 hover:underline">Supplier Rebates</a>
         <a href="{% url 'finance:ledger_list' %}" class="text-sm text-slate-600 hover:underline">Business Ledger</a> -->
+        {% if can_record %}<a href="{% url 'finance:expense_import' %}" class="text-sm text-slate-600 hover:underline">Import from Excel</a>{% endif %}
         {% if can_record %}<a href="{% url 'finance:expense_create' %}" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
             New Expense
         </a>{% endif %}
@@ -47,4 +48,14 @@
     <div class="px-4 py-6 text-gray-500 text-sm">No expenses recorded yet.</div>
     {% endfor %}
 </div>
+
+{% if expenses.paginator.num_pages > 1 %}
+<div class="flex items-center justify-between mt-4 text-sm text-gray-600">
+    <span>Page {{ expenses.number }} of {{ expenses.paginator.num_pages }} &middot; {{ expenses.paginator.count }} expenses</span>
+    <div class="flex items-center gap-3">
+        {% if expenses.has_previous %}<a href="?page={{ expenses.previous_page_number }}" class="hover:underline">&larr; Newer</a>{% endif %}
+        {% if expenses.has_next %}<a href="?page={{ expenses.next_page_number }}" class="hover:underline">Older &rarr;</a>{% endif %}
+    </div>
+</div>
+{% endif %}
 {% endblock %}

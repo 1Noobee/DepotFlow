@@ -44,6 +44,40 @@ class HealthCheckFormulaTests(SimpleTestCase):
         self.assertEqual(round(check.operator_equity_percent), 105)
         self.assertIsNone(check.nbc_credit_utilization_percent)
 
+    def test_reproduces_the_april_health_check_file_exactly(self):
+        # Book3.xlsx: E92 stock, E94 cash, E95 GIT, E97 exposure, E99 limit, E100 permanent credit.
+        check = MonthlyHealthCheck(
+            grand_total_stock_value=Decimal('32494500'),
+            cash_at_hand=Decimal('33459700'),
+            git_order_released_cases=Decimal('2772'),
+            git_order_released=Decimal('12674250'),
+            credit_exposure_balance=Decimal('-17987'),
+            nbc_credit_limit=Decimal('0'),
+            nbc_permanent_credit=Decimal('0'),
+        )
+        self.assertEqual(check.total_working_capital, Decimal('78628450'))            # E96
+        self.assertEqual(check.operator_owned_working_capital, Decimal('78646437'))   # E98
+        self.assertAlmostEqual(float(check.operator_equity_percent), 100.02287594, places=6)  # E101
+        self.assertIsNone(check.nbc_credit_utilization_percent)                       # E102 (#DIV/0! in Excel)
+
+    def test_utilization_is_exposure_over_limit_as_in_the_sheet(self):
+        check = MonthlyHealthCheck(credit_exposure_balance=Decimal('5000000'), nbc_credit_limit=Decimal('20000000'))
+        self.assertEqual(check.nbc_credit_utilization_percent, Decimal('25'))
+
+    def test_permanent_credit_is_not_added_to_or_taken_out_of_the_sheet_totals(self):
+        base = dict(grand_total_stock_value=Decimal('1000'), cash_at_hand=Decimal('500'),
+                    git_order_released=Decimal('100'), credit_exposure_balance=Decimal('-50'))
+        plain = MonthlyHealthCheck(**base)
+        with_credit = MonthlyHealthCheck(nbc_permanent_credit=Decimal('999'), **base)
+        self.assertEqual(plain.total_working_capital, with_credit.total_working_capital)
+        self.assertEqual(plain.operator_owned_working_capital, with_credit.operator_owned_working_capital)
+
+    def test_bank_balance_stays_out_of_the_nbc_total_but_counts_for_month_to_month_movement(self):
+        check = MonthlyHealthCheck(grand_total_stock_value=Decimal('1000'), cash_at_hand=Decimal('500'),
+                                   bank_balance=Decimal('300'))
+        self.assertEqual(check.total_working_capital, Decimal('1500'))
+        self.assertEqual(check.total_working_capital_incl_bank, Decimal('1800'))
+
 
 class RebateRolePolicyTests(SimpleTestCase):
     def test_only_commercial_manager_and_super_admin_manage_reinvestment_targets(self):

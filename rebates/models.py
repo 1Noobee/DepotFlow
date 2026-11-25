@@ -90,17 +90,18 @@ class MonthlyHealthCheck(TimeStampedModel):
     year = models.PositiveSmallIntegerField()
     month = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)])
     grand_total_stock_cases = models.DecimalField(max_digits=14, decimal_places=2, default=0, help_text='Stock quantity in cases, as shown beside the stock value on the health-check sheet.')
-    grand_total_stock_value = models.DecimalField(max_digits=16, decimal_places=2, default=0)
-    cash_at_hand = models.DecimalField(max_digits=16, decimal_places=2, default=0)
-    git_order_released = models.DecimalField(max_digits=16, decimal_places=2, default=0, help_text='Goods in transit / order released value.')
-    credit_exposure_balance = models.DecimalField(max_digits=16, decimal_places=2, default=0, help_text='Enter exactly as it appears on the health-check sheet (a negative figure is allowed).')
-    nbc_credit_limit = models.DecimalField(max_digits=16, decimal_places=2, default=0)
-    nbc_permanent_credit = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    grand_total_stock_value = models.DecimalField(max_digits=16, decimal_places=2, default=0, help_text='Total settled stock value physically in the MDP warehouse (cases x NBC unit price).')
+    cash_at_hand = models.DecimalField(max_digits=16, decimal_places=2, default=0, help_text='Physical cash available at the MDP.')
+    git_order_released_cases = models.DecimalField(max_digits=14, decimal_places=2, default=0, help_text='Cases in GIT / order released, as shown beside the GIT value on the health-check sheet.')
+    git_order_released = models.DecimalField(max_digits=16, decimal_places=2, default=0, help_text='Goods already debited but not yet delivered, i.e. credit exposure minus total invoice.')
+    credit_exposure_balance = models.DecimalField(max_digits=16, decimal_places=2, default=0, help_text='The value directly under the credit limit. Enter it exactly as shown (a negative figure is allowed).')
+    nbc_credit_limit = models.DecimalField(max_digits=16, decimal_places=2, default=0, help_text='The value directly under the turnover-base credit limit.')
+    nbc_permanent_credit = models.DecimalField(max_digits=16, decimal_places=2, default=0, help_text='The NBC credit in the business. Recorded for reference; like the NBC sheet, it is not added to or taken out of the totals.')
     operator_equity_contribution_percent = models.DecimalField(max_digits=7, decimal_places=2, default=0)
     empties_quantity = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     plastic_quantity = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     empties_value = models.DecimalField(max_digits=16, decimal_places=2, default=0)
-    bank_balance = models.DecimalField(max_digits=16, decimal_places=2, default=0, help_text='Manually entered from the monthly Distribution Manager health check.')
+    bank_balance = models.DecimalField(max_digits=16, decimal_places=2, default=0, help_text='Optional memo. The NBC health-check sheet has no bank line, so this is not part of NBC total working capital; it is added only for the app\'s own month-to-month tracking.')
     notes = models.TextField(blank=True)
     completed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     completed_at = models.DateTimeField(default=timezone.now)
@@ -154,12 +155,19 @@ class MonthlyHealthCheck(TimeStampedModel):
         previous = self.previous_month_health_check
         if previous is None:
             return None
-        return self.total_working_capital - previous.total_working_capital
+        return self.total_working_capital_incl_bank - previous.total_working_capital_incl_bank
 
     @property
     def total_working_capital(self):
-        # Working capital includes the operator's resources and NBC credit facility.
-        return self.grand_total_stock_value + self.cash_at_hand + self.bank_balance + self.git_order_released + self.nbc_permanent_credit
+        # Exactly as the NBC health-check sheet: settled stock + cash + GIT / order released.
+        return self.grand_total_stock_value + self.cash_at_hand + self.git_order_released
+
+    @property
+    def total_working_capital_incl_bank(self):
+        # The app's own measure for month-to-month movement (reinvestment): the NBC
+        # total plus any bank balance entered. Equal to the NBC total when no bank
+        # balance is entered.
+        return self.total_working_capital + self.bank_balance
 
     @property
     def nbc_credit_utilization_percent(self):
@@ -169,9 +177,9 @@ class MonthlyHealthCheck(TimeStampedModel):
 
     @property
     def operator_owned_working_capital(self):
-        # Matches the health-check sheet: total working capital less the NBC
-        # credit position (permanent credit and the credit exposure balance).
-        return self.total_working_capital - self.nbc_permanent_credit - self.credit_exposure_balance
+        # Matches the health-check sheet: total working capital less the credit
+        # exposure balance (a negative balance therefore increases it).
+        return self.total_working_capital - self.credit_exposure_balance
 
     @property
     def operator_equity_percent(self):
@@ -288,7 +296,7 @@ class MonthlyProfitability(TimeStampedModel):
         followup = self.reinvestment_followup_health_check
         if baseline is None or followup is None:
             return None
-        return followup.total_working_capital - baseline.total_working_capital
+        return followup.total_working_capital_incl_bank - baseline.total_working_capital_incl_bank
 
     @property
     def observed_reinvestment(self):

@@ -5,7 +5,7 @@ from .models import MonthlyHealthCheck
 class MonthlyHealthCheckForm(forms.ModelForm):
     class Meta:
         model = MonthlyHealthCheck
-        fields = ['depot', 'year', 'month', 'grand_total_stock_cases', 'grand_total_stock_value', 'cash_at_hand', 'bank_balance', 'git_order_released', 'credit_exposure_balance', 'nbc_credit_limit', 'nbc_permanent_credit', 'empties_quantity', 'plastic_quantity', 'empties_value', 'notes']
+        fields = ['depot', 'year', 'month', 'grand_total_stock_cases', 'grand_total_stock_value', 'cash_at_hand', 'bank_balance', 'git_order_released_cases', 'git_order_released', 'credit_exposure_balance', 'nbc_credit_limit', 'nbc_permanent_credit', 'empties_quantity', 'plastic_quantity', 'empties_value', 'notes']
         widgets = {'notes': forms.Textarea(attrs={'rows': 3})}
 
     def __init__(self, *args, user=None, **kwargs):

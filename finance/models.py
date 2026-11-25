@@ -23,6 +23,51 @@ class ExpenseCategory(TimeStampedModel):
 
 
 # =========================
+# EXPENSE IMPORT BATCH
+# =========================
+class ExpenseImportBatch(TimeStampedModel):
+    """
+    One upload of an expense workbook. Every Expense created by the
+    importer points back at its batch, so a whole import can be
+    reviewed, approved or reversed together.
+    """
+
+    depot = models.ForeignKey(
+        Depot,
+        on_delete=models.PROTECT,
+        related_name="expense_import_batches"
+    )
+
+    file_name = models.CharField(max_length=255)
+    sheet_name = models.CharField(max_length=100, blank=True)
+
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
+    payment_method = models.CharField(max_length=10)
+    auto_approved = models.BooleanField(default=False)
+
+    expenses_created = models.PositiveIntegerField(default=0)
+    rows_skipped = models.PositiveIntegerField(default=0)
+    total_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    date_from = models.DateField(null=True, blank=True)
+    date_to = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name_plural = "Expense import batches"
+
+    def __str__(self):
+        return f"{self.file_name} ({self.created_at:%Y-%m-%d %H:%M})"
+
+
+# =========================
 # BUSINESS LEDGER
 # =========================
 class BusinessLedger(TimeStampedModel):
@@ -228,6 +273,16 @@ class Expense(LedgerPostedRecord):
 
     # Workflow field — deliberately NOT in locked_fields.
     approved = models.BooleanField(default=False)
+
+    # Set when the expense was created by an Excel import; null for
+    # expenses typed into the app. Not a locked field.
+    import_batch = models.ForeignKey(
+        ExpenseImportBatch,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="expenses",
+    )
 
     ledger_transaction_type = BusinessLedger.TransactionType.EXPENSE
     locked_fields = ("depot", "category", "expense_date", "amount", "description")

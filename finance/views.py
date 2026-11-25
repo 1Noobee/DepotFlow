@@ -1,10 +1,25 @@
+import datetime as dt
+from io import BytesIO
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
+from django.db.models import Count, Sum
+from django.db.models.functions import TruncMonth
+from django.http import HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
+from django.utils import timezone
 
 from core.scoping import get_visible_depots, user_can_access_depot, is_unrestricted
-from .models import BusinessLedger, Expense, SupplierPayment, SupplierRebate
-from .forms import ExpenseForm, SupplierPaymentForm, SupplierRebateForm, ReversalForm
+from depots.models import Depot
+from . import expense_import as importer
+from .models import (
+    BusinessLedger, Expense, ExpenseCategory, ExpenseImportBatch,
+    SupplierPayment, SupplierRebate,
+)
+from .forms import (
+    ExpenseForm, ExpenseImportForm, SupplierPaymentForm, SupplierRebateForm, ReversalForm,
+)
 
 
 def _can_record_expenses(user):
@@ -46,9 +61,10 @@ def _can_manage_rebates(user):
 def expense_list(request):
     expenses = Expense.objects.filter(
         depot__in=get_visible_depots(request.user)
-    ).select_related("depot", "category").order_by("-expense_date")
+    ).select_related("depot", "category").order_by("-expense_date", "-id")
+    page = Paginator(expenses, 50).get_page(request.GET.get("page"))
     return render(request, "finance/expense_list.html", {
-        "expenses": expenses,
+        "expenses": page,
         "can_approve": _can_approve_finance(request.user),
         "can_record": _can_record_expenses(request.user),
     })
@@ -120,6 +136,279 @@ def expense_reverse(request, pk):
         "form": form,
         "object_repr": f"{expense.reference_number} — {expense.category.name} — \u20a6{expense.amount}",
         "title": f"Reverse Expense {expense.reference_number}",
+    })
+
+
+# =========================
+# EXPENSE IMPORT FROM EXCEL
+# =========================
+IMPORT_SESSION_KEY = "expense_import"
+
+
+def _import_depot_or_none(request, state):
+    depot = Depot.objects.filter(pk=state["depot_id"]).first()
+    if depot is None or not user_can_access_depot(request.user, depot):
+        return None
+    return depot
+
+
+@login_required
+def expense_import(request):
+    """Step 1: choose the depot and the workbook."""
+    if not _can_record_expenses(request.user):
+        messages.error(request, "You do not have permission to record expenses.")
+        return redirect("finance:expense_list")
+
+    can_approve = _can_approve_finance(request.user)
+
+    if request.method == "POST":
+        form = ExpenseImportForm(
+            request.POST, request.FILES, user=request.user, can_approve=can_approve,
+        )
+        if form.is_valid():
+            upload = form.cleaned_data["file"]
+            try:
+                parsed = importer.parse_workbook(upload, form.cleaned_data["sheet_name"])
+            except importer.SheetImportError as exc:
+                form.add_error("file", str(exc))
+            else:
+                request.session[IMPORT_SESSION_KEY] = {
+                    "depot_id": form.cleaned_data["depot"].pk,
+                    "file_name": upload.name,
+                    "payment_method": form.cleaned_data["payment_method"],
+                    "mark_approved": bool(can_approve and form.cleaned_data.get("mark_approved")),
+                    **parsed,
+                }
+                return redirect("finance:expense_import_preview")
+    else:
+        form = ExpenseImportForm(user=request.user, can_approve=can_approve)
+
+    return render(request, "finance/expense_import.html", {"form": form})
+
+
+def _mapping_from_request(request, used_headers, suggestions):
+    """Read the category dropdowns; fall back to the suggestion for anything invalid."""
+    mapping = {}
+    for index, header in enumerate(used_headers):
+        chosen = request.POST.get(f"map_{index}") if request.method == "POST" else None
+        if chosen == "new":
+            mapping[header] = None
+        elif chosen and chosen.isdigit() and ExpenseCategory.objects.filter(pk=int(chosen)).exists():
+            mapping[header] = int(chosen)
+        else:
+            mapping[header] = suggestions[header]["category_id"]
+    return mapping
+
+
+@login_required
+def expense_import_preview(request):
+    """Step 2: show exactly what would happen; save only on Confirm."""
+    if not _can_record_expenses(request.user):
+        messages.error(request, "You do not have permission to record expenses.")
+        return redirect("finance:expense_list")
+
+    state = request.session.get(IMPORT_SESSION_KEY)
+    if not state:
+        messages.error(request, "Upload a workbook first.")
+        return redirect("finance:expense_import")
+
+    depot = _import_depot_or_none(request, state)
+    if depot is None:
+        request.session.pop(IMPORT_SESSION_KEY, None)
+        messages.error(request, "You do not have access to that depot.")
+        return redirect("finance:expense_import")
+
+    rows = state["rows"]
+    used_headers = [h for h in state["headers"] if any(r["header"] == h for r in rows)]
+    suggestions = importer.suggest_category_map(used_headers)
+    mapping = _mapping_from_request(request, used_headers, suggestions)
+    allow_overlap = request.method == "POST" and "allow_overlap" in request.POST
+
+    if request.method == "POST" and request.POST.get("action") == "confirm":
+        classified = importer.classify_rows(depot, rows, mapping, allow_overlap=allow_overlap)
+        if state["issues"]:
+            messages.error(request, "Fix the problems listed below in the sheet, then upload it again.")
+        elif not classified["importable"]:
+            messages.error(request, "There is nothing new to import.")
+        else:
+            batch, _ = importer.commit_import(
+                user=request.user,
+                depot=depot,
+                file_name=state["file_name"],
+                sheet_name=state["sheet"],
+                rows=rows,
+                headers=used_headers,
+                mapping=mapping,
+                payment_method=state["payment_method"],
+                auto_approve=state["mark_approved"] and _can_approve_finance(request.user),
+                allow_overlap=allow_overlap,
+            )
+            request.session.pop(IMPORT_SESSION_KEY, None)
+            messages.success(
+                request,
+                f"Imported {batch.expenses_created} expenses totalling \u20a6{batch.total_amount:,.2f}"
+                + (f"; {batch.rows_skipped} sheet entries were skipped." if batch.rows_skipped else "."),
+            )
+            return redirect("finance:expense_import_batch_detail", pk=batch.pk)
+    else:
+        classified = importer.classify_rows(depot, rows, mapping, allow_overlap=allow_overlap)
+
+    header_stats = {}
+    for row in rows:
+        stat = header_stats.setdefault(row["header"], {"count": 0, "amount": 0})
+        stat["count"] += 1
+        stat["amount"] += float(row["amount"])
+
+    categories = list(ExpenseCategory.objects.all())
+    mapping_rows = []
+    for index, header in enumerate(used_headers):
+        mapping_rows.append({
+            "index": index,
+            "header": header,
+            "count": header_stats[header]["count"],
+            "amount": header_stats[header]["amount"],
+            "selected": mapping[header],
+            "match": suggestions[header]["match"],
+            "suggested_name": suggestions[header]["category_name"],
+        })
+
+    return render(request, "finance/expense_import_preview.html", {
+        "state": state,
+        "depot": depot,
+        "classified": classified,
+        "mapping_rows": mapping_rows,
+        "categories": categories,
+        "allow_overlap": allow_overlap,
+        "skipped_total": (
+            len(classified[importer.ALREADY_IMPORTED]) + len(classified[importer.ALREADY_IN_APP])
+        ),
+        "conflicts": classified[importer.CHANGED] + classified[importer.OVERLAP],
+        "can_confirm": not state["issues"] and bool(classified["importable"]),
+    })
+
+
+@login_required
+def expense_import_cancel(request):
+    request.session.pop(IMPORT_SESSION_KEY, None)
+    return redirect("finance:expense_list")
+
+
+@login_required
+def expense_import_template(request):
+    """A blank workbook in the layout the importer reads."""
+    import openpyxl
+    from openpyxl.utils import get_column_letter
+
+    if not _can_record_expenses(request.user):
+        messages.error(request, "You do not have permission to record expenses.")
+        return redirect("finance:expense_list")
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Expense"
+    ws["A1"] = "Expenses"
+    ws["A2"] = "Date"
+    names = list(ExpenseCategory.objects.values_list("name", flat=True))
+    for col, name in enumerate(names, start=2):
+        ws.cell(2, col, name)
+        ws.column_dimensions[get_column_letter(col)].width = max(14, len(name) + 2)
+    ws.column_dimensions["A"].width = 14
+
+    year = timezone.localdate().year
+    day = dt.date(year, 1, 1)
+    row = 3
+    while day.year == year:
+        ws.cell(row, 1, day).number_format = "dd-mmm-yyyy"
+        day += dt.timedelta(days=1)
+        row += 1
+    ws.freeze_panes = "B3"
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = 'attachment; filename="expense_import_template.xlsx"'
+    return response
+
+
+@login_required
+def expense_import_batch_list(request):
+    batches = ExpenseImportBatch.objects.filter(
+        depot__in=get_visible_depots(request.user)
+    ).select_related("depot", "uploaded_by")
+    return render(request, "finance/expense_import_batch_list.html", {"batches": batches})
+
+
+def _visible_batch_or_none(request, pk):
+    batch = get_object_or_404(ExpenseImportBatch.objects.select_related("depot", "uploaded_by"), pk=pk)
+    if not user_can_access_depot(request.user, batch.depot):
+        return None
+    return batch
+
+
+@login_required
+def expense_import_batch_detail(request, pk):
+    batch = _visible_batch_or_none(request, pk)
+    if batch is None:
+        messages.error(request, "You do not have access to that import.")
+        return redirect("finance:expense_list")
+
+    expenses = batch.expenses.all()
+    live = expenses.filter(is_reversed=False)
+    by_month = (
+        live.annotate(month=TruncMonth("expense_date"))
+        .values("month").annotate(count=Count("id"), total=Sum("amount")).order_by("month")
+    )
+    return render(request, "finance/expense_import_batch_detail.html", {
+        "batch": batch,
+        "live_count": live.count(),
+        "pending_count": live.filter(approved=False).count(),
+        "reversed_count": expenses.filter(is_reversed=True).count(),
+        "live_total": live.aggregate(t=Sum("amount"))["t"] or 0,
+        "by_month": by_month,
+        "can_approve": _can_approve_finance(request.user),
+    })
+
+
+@login_required
+def expense_import_batch_approve(request, pk):
+    batch = _visible_batch_or_none(request, pk)
+    if batch is None or not _can_approve_finance(request.user):
+        messages.error(request, "You do not have permission to approve these expenses.")
+        return redirect("finance:expense_list")
+
+    if request.method == "POST":
+        count = importer.approve_batch(batch)
+        messages.success(request, f"Approved {count} expenses.")
+    return redirect("finance:expense_import_batch_detail", pk=batch.pk)
+
+
+@login_required
+def expense_import_batch_reverse(request, pk):
+    batch = _visible_batch_or_none(request, pk)
+    if batch is None or not _can_approve_finance(request.user):
+        messages.error(request, "You do not have permission to reverse these expenses.")
+        return redirect("finance:expense_list")
+
+    live = batch.expenses.filter(is_reversed=False)
+    if request.method == "POST":
+        form = ReversalForm(request.POST)
+        if form.is_valid():
+            try:
+                count = importer.reverse_batch(batch, request.user, form.cleaned_data["reason"])
+                messages.success(request, f"Reversed {count} expenses from this import.")
+                return redirect("finance:expense_import_batch_detail", pk=batch.pk)
+            except Exception as exc:
+                messages.error(request, str(exc))
+    else:
+        form = ReversalForm()
+
+    return render(request, "finance/reversal_form.html", {
+        "form": form,
+        "object_repr": f"{batch.file_name} \u2014 {live.count()} expenses, \u20a6{live.aggregate(t=Sum('amount'))['t'] or 0:,.2f}",
+        "title": "Reverse whole import",
     })
 
 
