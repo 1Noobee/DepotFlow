@@ -37,7 +37,7 @@ class OwnerFinanceAccessTests(TestCase):
         cls.viewer = make_user("viewer", R.VIEWER, depot=cls.depot)
         cls.dm = make_user("dm", R.DEPOT_MANAGER, depot=cls.depot)
 
-        cls.category = ExpenseCategory.objects.create(name="Fuel")
+        cls.category, _ = ExpenseCategory.objects.get_or_create(name="Fuel")
         cls.nbc = Supplier.objects.create(name="NBC")
         cls.expense = cls.make_expense(cls.depot)
         cls.other_expense = cls.make_expense(cls.other_depot)

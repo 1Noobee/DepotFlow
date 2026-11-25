@@ -308,7 +308,7 @@ def expense_import_template(request):
     ws.title = "Expense"
     ws["A1"] = "Expenses"
     ws["A2"] = "Date"
-    names = list(ExpenseCategory.objects.values_list("name", flat=True))
+    names = list(ExpenseCategory.objects.order_by("name").values_list("name", flat=True))
     for col, name in enumerate(names, start=2):
         ws.cell(2, col, name)
         ws.column_dimensions[get_column_letter(col)].width = max(14, len(name) + 2)

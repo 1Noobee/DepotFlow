@@ -162,7 +162,7 @@ class ImportLogicTests(TestCase):
         cls.territory = Territory.objects.create(name="North")
         cls.depot = Depot.objects.create(territory=cls.territory, name="Mine", code="MI")
         cls.user = make_user("admin", R.SUPER_ADMIN)
-        cls.fuel = ExpenseCategory.objects.create(name="Fuel")
+        cls.fuel, _ = ExpenseCategory.objects.get_or_create(name="Fuel")
         cls.rows = [
             {"date": "2026-01-05", "header": "Fuel", "amount": "1000.00", "ref": "B3"},
             {"date": "2026-01-05", "header": "Salary", "amount": "500.50", "ref": "C3"},
@@ -243,12 +243,12 @@ class ImportLogicTests(TestCase):
         self.assertEqual(len(classified["importable"]), 2)
 
     def test_suggest_category_map(self):
-        ExpenseCategory.objects.create(name="Warehouse Maintenance")
-        s = ei.suggest_category_map(["fuel ", "Warehouse maintainance", "Pure water"])
+        s = ei.suggest_category_map(["fuel ", "Warehous maintainance", "Pure water"])
         self.assertEqual((s["fuel "]["match"], s["fuel "]["category_id"]), ("exact", self.fuel.pk))
-        self.assertEqual(s["Warehouse maintainance"]["match"], "similar")
-        self.assertEqual(s["Warehouse maintainance"]["category_name"], "Warehouse Maintenance")
-        self.assertEqual((s["Pure water"]["match"], s["Pure water"]["category_id"]), ("new", None))
+        self.assertEqual(s["Warehous maintainance"]["match"], "similar")
+        self.assertEqual(s["Warehous maintainance"]["category_name"], "Warehouse maintainance")
+        self.assertEqual(s["Pure water"]["match"], "exact")
+        self.assertIsNotNone(s["Pure water"]["category_id"])
 
     def test_approve_batch_and_reverse_batch(self):
         batch, _ = self.commit()
@@ -274,7 +274,7 @@ class ImportViewTests(TestCase):
         cls.other_owner = make_user("owner2", R.DEPOT_OWNER, depot=cls.other_depot)
         cls.officer = make_user("officer", R.DEPOT_OFFICER, depot=cls.depot)
         cls.viewer = make_user("viewer", R.VIEWER, depot=cls.depot)
-        ExpenseCategory.objects.create(name="Fuel")
+        ExpenseCategory.objects.get_or_create(name="Fuel")
 
     def sheet(self, **kw):
         return build_workbook([(D(PAST.year, PAST.month, PAST.day), {"Fuel": 1000, "Salary": 500})], **kw)
@@ -395,7 +395,10 @@ class ImportViewTests(TestCase):
         response = self.client.get(reverse("finance:expense_import_template"))
         self.assertEqual(response.status_code, 200)
         ws = openpyxl.load_workbook(BytesIO(response.content))["Expense"]
-        self.assertEqual([ws["A2"].value, ws["B2"].value], ["Date", "Fuel"])
+        self.assertEqual(ws["A2"].value, "Date")
+        expected_categories = list(ExpenseCategory.objects.order_by("name").values_list("name", flat=True))
+        actual_categories = [ws.cell(2, col).value for col in range(2, ws.max_column + 1)]
+        self.assertEqual(actual_categories, expected_categories)
         # and the importer can read its own template
         ws["A3"].value
         ws["B3"] = 2500

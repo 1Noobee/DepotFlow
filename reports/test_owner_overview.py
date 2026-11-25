@@ -37,7 +37,7 @@ class OwnerOverviewBase(TestCase):
             sku="SKU-1", name="Cola 50cl", category="Sparkling",
             package_type="CRATE", volume="50cl", pack_size=24,
         )
-        cls.category = ExpenseCategory.objects.create(name="Fuel")
+        cls.category, _ = ExpenseCategory.objects.get_or_create(name="Fuel")
 
         receipt = StockReceipt.objects.create(
             supplier=cls.nbc, depot=cls.depot, invoice_number="INV-1",
