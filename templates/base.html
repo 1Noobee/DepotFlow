@@ -6,72 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}DepotFlow{% endblock %}</title>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@11.1.0/public/assets/styles/choices.min.css">
-
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'depot-ink': '#181818',
-                        'depot-paper': '#FAFAFA',
-                        'depot-teal': '#E4002B',
-                        'depot-teal-light': '#B0001F',
-                        'depot-amber': '#FFFFFF',
-                        'depot-brick': '#7A0019',
-                        'depot-moss': '#2E7D42',
-                    },
-                    fontFamily: {
-                        display: ['"Poppins"', 'sans-serif'],
-                        sans: ['Inter', 'sans-serif'],
-                    },
-                },
-            },
-        };
-    </script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/choices.js@11.1.0/public/assets/scripts/choices.min.js"></script>
+    {# Everything the pages need is served by this app (no outside CDNs), so the site looks and works
+       the same on any connection. See assets/tailwind.input.css for how to rebuild tailwind.css. #}
+    <link rel="stylesheet" href="{% static 'core/css/fonts.css' %}">
+    <link rel="stylesheet" href="{% static 'core/vendor/choices/choices.min.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/tailwind.css' %}">
+    <script defer src="{% static 'core/vendor/alpine.min.js' %}"></script>
+    <script defer src="{% static 'core/vendor/choices/choices.min.js' %}"></script>
     <script defer src="{% static 'core/js/product_choices.js' %}"></script>
     <script defer src="{% static 'core/js/dynamic_formset.js' %}"></script>
     <script defer src="{% static 'core/js/stock_hint.js' %}"></script>
-
-    <style type="text/tailwindcss">
-        @layer base {
-            h1, h2, h3, h4 {
-                font-family: 'Poppins', sans-serif;
-            }
-            [x-cloak] { display: none !important; }
-            /* Formset DELETE checkboxes are driven by the Remove button
-               in partials/dynamic_formset.html, not shown directly. */
-            [id^="div_id_"][id$="-DELETE"] { display: none; }
-        }
-        @layer components {
-            .nav-link {
-                @apply px-3 py-2 rounded-md text-sm text-stone-100/90 hover:text-white hover:bg-white/10 transition-colors;
-            }
-            .nav-link-active {
-                @apply text-white bg-white/10;
-                box-shadow: inset 0 -2px 0 0 #FFFFFF;
-            }
-            .dropdown-panel {
-                @apply absolute left-0 mt-1 w-48 rounded-md border border-stone-200 bg-white py-1 text-depot-ink shadow-lg z-30;
-            }
-            .dropdown-link {
-                @apply block px-4 py-2 text-sm text-depot-ink/90 hover:bg-depot-paper;
-            }
-            .mobile-section-label {
-                @apply px-4 pt-3 pb-1 text-xs text-stone-400;
-            }
-            .mobile-link {
-                @apply block px-4 py-2 text-sm text-stone-100/90 hover:bg-white/10 hover:text-white;
-            }
-        }
-    </style>
 
     <style>
         /* Choices.js ships its own stylesheet (not Tailwind utilities) —
