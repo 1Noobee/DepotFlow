@@ -56,20 +56,18 @@
 {% endif %}
 
 <div class="bg-white rounded shadow divide-y mb-6">
-    <div class="px-4 py-2 grid grid-cols-5 gap-4 text-xs font-medium text-gray-500 uppercase">
+    <div class="px-4 py-2 grid grid-cols-4 gap-4 text-xs font-medium text-gray-500 uppercase">
         <span>Product</span>
         <span>Quantity</span>
-        <span>Effective Cost</span>
-        <span>Effective Price</span>
-        <span>Expected Profit</span>
+        <span>Price</span>
+        <span>Value</span>
     </div>
     {% for item in items %}
-    <div class="px-4 py-3 grid grid-cols-5 gap-4 text-sm items-center">
+    <div class="px-4 py-3 grid grid-cols-4 gap-4 text-sm items-center">
         <span>{{ item.product.name }}</span>
         <span>{{ item.quantity }}</span>
-        <span>&#8358;{{ item.effective_cost_price }}</span>
         <span>&#8358;{{ item.effective_selling_price }}</span>
-        <span class="font-medium">&#8358;{{ item.expected_profit }}</span>
+        <span class="font-medium">&#8358;{{ item.expected_revenue }}</span>
     </div>
     {% empty %}
     <div class="px-4 py-6 text-gray-500 text-sm">No items on this load.</div>

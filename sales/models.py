@@ -292,7 +292,7 @@ class SaleItem(TimeStampedModel):
         if is_new:
             depot = self.sale.vehicle_load.depot
             self.unit_cost = get_current_acquisition_cost(depot, self.product)
-            self.unit_price = get_current_selling_price(self.product)
+            self.unit_price = get_current_selling_price(self.product, depot=depot)
 
             if self.promotion:
                 self.discount_applied = self.promotion.calculate_discount_per_unit(

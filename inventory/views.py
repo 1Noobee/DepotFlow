@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import ProtectedError
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -7,16 +8,15 @@ from django.shortcuts import render, redirect, get_object_or_404
 from depots.models import Depot
 from operations.models import VehicleSalesman
 from core.scoping import get_visible_depots, user_can_access_depot
-from .models import Product, Supplier, StockReceipt, Promotion
+from .models import (
+    Product, Supplier, StockReceipt, StockReceiptItem, Promotion, DepotPriceChange,
+)
 from .scoping import visible_promotions, can_edit_promotion
 from .forms import (
-    ProductForm, PriceChangeForm, SupplierForm,
+    ProductForm, SupplierForm,
     StockReceiptForm, StockReceiptItemFormSet, PromotionForm,
 )
-from .services import (
-    get_current_selling_price, get_current_cost_reference, record_price_change,
-    get_stock_balance,
-)
+from .services import get_stock_balance, record_depot_price_changes
 
 
 def _can_manage_inventory(user):
@@ -100,12 +100,29 @@ def product_list(request):
 def product_detail(request, pk):
     product = get_object_or_404(Product, pk=pk)
 
+    # The one price: the price on the latest stock receipt, per depot the user can see.
+    depot_prices = []
+    for depot in get_visible_depots(request.user):
+        item = (
+            StockReceiptItem.objects
+            .filter(stock_receipt__depot=depot, product=product)
+            .select_related("stock_receipt")
+            .order_by("-stock_receipt__receipt_date", "-created_at")
+            .first()
+        )
+        if item:
+            depot_prices.append({
+                "depot": depot,
+                "price": item.cost_price,
+                "since": item.stock_receipt.receipt_date,
+                "changes": DepotPriceChange.objects.filter(
+                    depot=depot, product=product
+                ).select_related("stock_receipt", "changed_by")[:5],
+            })
+
     context = {
         "product": product,
-        "current_selling_price": get_current_selling_price(product),
-        "current_cost_reference": get_current_cost_reference(product),
-        "price_history": product.price_history.all()[:20],
-        "can_manage_pricing": _can_manage_pricing(request.user),
+        "depot_prices": depot_prices,
     }
 
     return render(request, "inventory/product_detail.html", context)
@@ -183,35 +200,6 @@ def product_delete(request, pk):
             )
 
     return redirect("inventory:product_detail", pk=pk)
-
-
-@login_required
-def change_price(request, pk):
-    product = get_object_or_404(Product, pk=pk)
-
-    if not _can_manage_pricing(request.user):
-        messages.error(request, "You do not have permission to change pricing.")
-        return redirect("inventory:product_detail", pk=pk)
-
-    if request.method == "POST":
-        form = PriceChangeForm(request.POST)
-        if form.is_valid():
-            record_price_change(
-                product,
-                selling_price=form.cleaned_data["selling_price"],
-                cost_price=form.cleaned_data["cost_price"],
-                user=request.user,
-                reason=form.cleaned_data["reason"],
-            )
-            messages.success(request, "Price updated.")
-            return redirect("inventory:product_detail", pk=pk)
-    else:
-        form = PriceChangeForm(initial={
-            "selling_price": get_current_selling_price(product),
-            "cost_price": get_current_cost_reference(product),
-        })
-
-    return render(request, "inventory/price_change_form.html", {"form": form, "product": product})
 
 
 # =========================
@@ -294,17 +282,47 @@ def stock_receipt_create(request):
         return redirect("inventory:stock_receipt_list")
 
     if request.method == "POST":
-        form = StockReceiptForm(request.POST)
+        form = StockReceiptForm(request.POST, user=request.user)
         formset = StockReceiptItemFormSet(request.POST, instance=StockReceipt())
 
         if form.is_valid() and formset.is_valid():
-            receipt = form.save()
-            formset.instance = receipt
-            formset.save()
+            with transaction.atomic():
+                # Capture the current price before this receipt is posted so a
+                # change can be recorded accurately after the new lines save.
+                product_ids = {
+                    item_form.cleaned_data["product"].pk
+                    for item_form in formset.forms
+                    if item_form.cleaned_data
+                    and not item_form.cleaned_data.get("DELETE", False)
+                    and item_form.cleaned_data.get("product") is not None
+                }
+                previous_prices = {}
+                for product_id in product_ids:
+                    previous_item = (
+                        StockReceiptItem.objects
+                        .filter(
+                            stock_receipt__depot=form.cleaned_data["depot"],
+                            product_id=product_id,
+                        )
+                        .order_by("-stock_receipt__receipt_date", "-created_at")
+                        .first()
+                    )
+                    previous_prices[product_id] = (
+                        previous_item.cost_price if previous_item else None
+                    )
+
+                receipt = form.save()
+                formset.instance = receipt
+                formset.save()
+
+                record_depot_price_changes(
+                    receipt, previous_prices, changed_by=request.user
+                )
+
             messages.success(request, f"Stock receipt {receipt.invoice_number} recorded.")
             return redirect("inventory:stock_receipt_detail", pk=receipt.pk)
     else:
-        form = StockReceiptForm()
+        form = StockReceiptForm(user=request.user)
         formset = StockReceiptItemFormSet(instance=StockReceipt())
 
     return render(

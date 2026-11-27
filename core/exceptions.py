@@ -5,7 +5,6 @@ Almost every model in this project enforces its business rules in
 clean()/save() via Django's full_clean(), which raises
 django.core.exceptions.ValidationError — not DRF's own
 ValidationError. A few service functions (e.g.
-inventory.services.record_price_change,
 inventory.services.create_adjustment) raise plain ValueError for the
 same purpose. Left alone, DRF's default exception handler doesn't
 know about either of these and turns them into unhandled 500s.

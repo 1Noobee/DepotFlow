@@ -35,14 +35,9 @@ class Product(TimeStampedModel):
     volume = models.CharField(max_length=20)
     pack_size = models.PositiveIntegerField()
 
-    # NOTE: These two fields are a convenience cache for admin/list
-    # display ONLY (e.g. "what's the last known price for this SKU").
-    # They are NOT the authoritative source for any transactional or
-    # reporting calculation. Selling price must be read from
-    # PriceHistory (see inventory.services.get_current_selling_price)
-    # and acquisition cost must be read from the relevant
-    # StockReceiptItem/inventory transaction
-    # (see inventory.services.get_current_acquisition_cost).
+    # RETIRED. The price now comes from the stock receipt line (see
+    # inventory.services). These two columns are kept only so old data is not
+    # lost; nothing reads them.
     base_cost_price = models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -60,37 +55,11 @@ class Product(TimeStampedModel):
     def __str__(self):
         return f"{self.sku} - {self.name}"
 
-    def update_prices(self, cost_price, selling_price, user=None, reason="", effective_from=None):
-        """
-        Record a new effective-dated price in PriceHistory (the
-        authoritative pricing source) and refresh the display-cache
-        fields on Product for convenience.
-
-        Prefer calling inventory.services.record_price_change()
-        directly; this method is kept for backward compatibility.
-        """
-
-        effective_from = effective_from or timezone.now()
-
-        with transaction.atomic():
-            price_history = PriceHistory.objects.create(
-                product=self,
-                cost_price=cost_price,
-                selling_price=selling_price,
-                effective_from=effective_from,
-                changed_by=user,
-                reason=reason,
-            )
-
-            self.base_cost_price = cost_price
-            self.base_selling_price = selling_price
-            self.save(update_fields=["base_cost_price", "base_selling_price", "updated_at"])
-
-        return price_history
-
 # =========================
 # PRICE HISTORY
 # =========================
+# RETIRED: the price now comes from the stock receipt line (see inventory.services).
+# This table is kept only so old rows are not lost; nothing reads or writes it.
 class PriceHistory(TimeStampedModel):
     product = models.ForeignKey(
         Product,
@@ -465,40 +434,38 @@ class StockReceiptItem(TimeStampedModel):
 
     quantity = models.PositiveIntegerField()
 
+    # The one price the depot works with: per case, as on the NBC invoice, tax included.
+    # (The database column keeps its original name, cost_price; people see "Price".)
     cost_price = models.DecimalField(
+        "Current selling price",
         max_digits=12,
         decimal_places=2,
-        help_text="Recorded acquisition/receipt cost. Do not add tax again if the entered cost is already tax-inclusive.",
-    )
-
-    rebate_landing_cost = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        help_text="Optional rebate-based cost per case with VAT and excise taken out. If blank, it is worked out from the cost price using NBC's workbook formula (VAT 7.5% + N10 per litre excise).",
+        help_text=(
+            "Enter the current price per case from the NBC invoice (VAT included). "
+            "This becomes the depot's current selling price. If it differs from "
+            "the previous price, DepotFlow updates the current price and records "
+            "the change in the price history."
+        ),
     )
 
     @property
     def rebate_cost_breakdown(self):
-        """Price, VAT, excise and landing cost worked out from cost_price."""
+        """Price, VAT, excise and landing cost worked out from the price."""
         return landing_cost_breakdown(self.cost_price, self.product)
 
     @property
     def effective_rebate_landing_cost(self):
         """
-        Rebate-based cost per case (no tax). A value typed on the receipt
-        line wins; otherwise it comes from the cost price minus VAT and
-        excise, exactly as NBC's rebate workbook does it.
+        Rebate-based cost per case (no tax): the price minus VAT and excise,
+        exactly as NBC's rebate workbook does it. Always worked out from the
+        price; it is never typed in.
         """
-        if self.rebate_landing_cost is not None:
-            return self.rebate_landing_cost
         return self.rebate_cost_breakdown["landing_cost"]
 
     @property
     def rebate_cost_needs_review(self):
         """True when the landing cost was estimated without excise (pack size unreadable)."""
-        return self.rebate_landing_cost is None and not self.rebate_cost_breakdown["excise_known"]
+        return not self.rebate_cost_breakdown["excise_known"]
 
     @property
     def effective_cost_price(self):
@@ -542,6 +509,44 @@ class StockReceiptItem(TimeStampedModel):
                     reference=self.stock_receipt.invoice_number,
                     transaction_date=timezone.now(),
                 )
+
+
+class DepotPriceChange(TimeStampedModel):
+    """Immutable audit record whenever a depot's current receipt price changes."""
+
+    stock_receipt = models.ForeignKey(
+        StockReceipt, on_delete=models.PROTECT, related_name="price_changes"
+    )
+    depot = models.ForeignKey(
+        Depot, on_delete=models.PROTECT, related_name="price_changes"
+    )
+    product = models.ForeignKey(
+        Product, on_delete=models.PROTECT, related_name="depot_price_changes"
+    )
+    previous_price = models.DecimalField(max_digits=12, decimal_places=2)
+    new_price = models.DecimalField(max_digits=12, decimal_places=2)
+    changed_at = models.DateTimeField(default=timezone.now, editable=False)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="depot_price_changes",
+    )
+
+    class Meta:
+        ordering = ["-changed_at", "-pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["stock_receipt", "product"],
+                name="uniq_depot_price_change_receipt_product",
+            )
+        ]
+        verbose_name = "Depot price change"
+        verbose_name_plural = "Depot price changes"
+
+    def __str__(self):
+        return (
+            f"{self.depot} - {self.product}: "
+            f"{self.previous_price} to {self.new_price}"
+        )
 
 
 # =========================

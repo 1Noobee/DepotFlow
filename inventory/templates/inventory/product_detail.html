@@ -4,11 +4,6 @@
 <div class="flex items-center justify-between mb-6">
     <h1 class="text-2xl font-semibold">{{ product.name }}</h1>
     <div class="flex items-center gap-3">
-        {% if can_manage_pricing %}
-        <a href="{% url 'inventory:change_price' product.pk %}" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
-            Change Price
-        </a>
-        {% endif %}
         <a href="{% url 'inventory:product_update' product.pk %}" class="text-sm text-slate-600 hover:underline">Edit</a>
         <form method="post" action="{% url 'inventory:product_delete' product.pk %}"
               onsubmit="return confirm('Delete {{ product.name|escapejs }}? This only works if it has no stock receipts, loads, sales, or returns recorded against it.');">
@@ -28,28 +23,30 @@
     </div>
 
     <div class="bg-white rounded shadow p-6 space-y-3">
-        <h2 class="font-semibold mb-2">Current Pricing</h2>
-        <p class="text-xs text-gray-500">Selling price is effective-date based (PriceHistory). Cost reference is informational only — actual acquisition cost is recorded per stock receipt.</p>
-        <div><span class="text-gray-500 text-sm">Current selling price</span><div class="text-lg font-semibold">&#8358;{{ current_selling_price }}</div></div>
-        <div><span class="text-gray-500 text-sm">Cost reference</span><div>&#8358;{{ current_cost_reference }}</div></div>
-    </div>
-</div>
-
-<div class="bg-white rounded shadow mt-6">
-    <h2 class="font-semibold px-6 pt-4">Price History</h2>
-    <div class="divide-y mt-2">
-        {% for entry in price_history %}
-        <div class="px-6 py-3 flex items-center justify-between text-sm">
-            <div>
-                <span class="font-medium">&#8358;{{ entry.selling_price }}</span>
-                <span class="text-gray-500 ml-2">effective {{ entry.effective_from|date:"Y-m-d H:i" }}</span>
-                {% if entry.reason %}<span class="text-gray-400 ml-2">— {{ entry.reason }}</span>{% endif %}
-            </div>
-            <span class="text-gray-500">{{ entry.changed_by|default:"—" }}</span>
+        <h2 class="font-semibold mb-2">Current selling price</h2>
+        <p class="text-xs text-gray-500">One price per case, tax included: the price on the latest stock receipt. The depot buys and sells at this price. To change it, record a new stock receipt.</p>
+        {% for row in depot_prices %}
+        <div class="flex items-baseline justify-between">
+            <span class="text-gray-500 text-sm">{{ row.depot.name }} <span class="text-xs">(since {{ row.since|date:"d M Y" }})</span></span>
+            <span class="text-lg font-semibold">&#8358;{{ row.price }}</span>
         </div>
+        {% if row.changes %}
+        <div class="border-t pt-3 mt-3">
+            <h3 class="text-sm font-semibold mb-2">Recent price changes</h3>
+            <div class="space-y-2">
+                {% for change in row.changes %}
+                <div class="text-xs text-gray-600">
+                    <div class="font-medium">&#8358;{{ change.previous_price }} &rarr; &#8358;{{ change.new_price }}</div>
+                    <div>{{ change.changed_at|date:"d M Y, H:i" }} &middot; Receipt {{ change.stock_receipt.invoice_number }}{% if change.changed_by %} &middot; {{ change.changed_by.username }}{% endif %}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
         {% empty %}
-        <div class="px-6 py-6 text-gray-500 text-sm">No price history recorded yet.</div>
+        <div class="text-sm text-gray-500">No stock receipt recorded for this product yet, so it has no price.</div>
         {% endfor %}
     </div>
 </div>
+
 {% endblock %}

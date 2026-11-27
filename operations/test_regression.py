@@ -10,7 +10,7 @@ from accounts.models import User
 from depots.models import Depot, Territory
 from finance.models import BusinessLedger
 from inventory.models import Product, Supplier, StockReceipt, StockReceiptItem
-from inventory.services import record_price_change, get_stock_balance
+from inventory.services import get_stock_balance
 from sales.models import Sale, SaleItem
 
 from .models import (
@@ -65,7 +65,6 @@ class OperationsTestCase(TestCase):
             sku="SKU-1", name="Cola 50cl", category="Soft Drinks",
             package_type="BOTTLE", volume="50cl", pack_size=24,
         )
-        record_price_change(cls.product, selling_price=1000, cost_price=600)
 
     def make_load(self, salesman=None, load_date=None):
         return VehicleLoad.objects.create(
@@ -158,7 +157,7 @@ class VehicleLoadItemTests(OperationsTestCase):
 
         self.assertEqual(get_stock_balance(self.depot, self.product), 30)  # 50 received - 20 loaded
         self.assertEqual(item.cost_price, 600)
-        self.assertEqual(item.selling_price, 1000)
+        self.assertEqual(item.selling_price, 600)   # one price: the receipt price
 
     def test_quantity_must_be_positive(self):
         load = self.make_load()
@@ -387,7 +386,7 @@ class LoadCloseViewTests(OperationsTestCase):
 
         ledger_entry = BusinessLedger.objects.get(reference=sale.sale_number)
         self.assertEqual(ledger_entry.transaction_type, BusinessLedger.TransactionType.INCOME)
-        self.assertEqual(ledger_entry.amount, 30 * 1000)  # 30 units at the 1000 selling price
+        self.assertEqual(ledger_entry.amount, 30 * 600)  # 30 units at the 600 receipt price
 
     def test_mismatched_total_is_rejected_and_load_stays_open(self):
         self.client.force_login(self.manager)

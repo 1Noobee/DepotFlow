@@ -1,48 +1,24 @@
 from rest_framework import serializers
 
-from .models import Product, PriceHistory, Supplier, Promotion
-from .services import get_current_selling_price, get_current_cost_reference
+from .models import Product, Supplier, Promotion
+from .services import get_current_selling_price
 
 
 class ProductSerializer(serializers.ModelSerializer):
-    current_selling_price = serializers.SerializerMethodField()
-    current_cost_reference = serializers.SerializerMethodField()
+    # The one price: the price on the latest stock receipt for this product
+    # (at any depot, since the API lists products across depots).
+    current_price = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = [
             "id", "sku", "name", "category", "package_type", "volume",
-            "pack_size", "is_active",
-            "current_selling_price", "current_cost_reference",
+            "pack_size", "is_active", "current_price",
         ]
-        read_only_fields = ["current_selling_price", "current_cost_reference"]
+        read_only_fields = ["current_price"]
 
-    def get_current_selling_price(self, obj):
+    def get_current_price(self, obj):
         return get_current_selling_price(obj)
-
-    def get_current_cost_reference(self, obj):
-        return get_current_cost_reference(obj)
-
-
-class PriceHistorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PriceHistory
-        fields = ["id", "product", "cost_price", "selling_price", "effective_from", "changed_by", "reason"]
-        read_only_fields = fields  # append-only, never editable via the API
-
-
-class PriceChangeSerializer(serializers.Serializer):
-    """
-    Not a ModelSerializer — a price change must always go through
-    inventory.services.record_price_change(), never a direct
-    PriceHistory create, so this only validates input for that call.
-    """
-
-    selling_price = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
-    cost_price = serializers.DecimalField(
-        max_digits=12, decimal_places=2, min_value=0, required=False, allow_null=True
-    )
-    reason = serializers.CharField(required=False, allow_blank=True)
 
 
 class SupplierSerializer(serializers.ModelSerializer):

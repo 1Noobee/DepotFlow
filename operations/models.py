@@ -303,7 +303,7 @@ class VehicleLoadItem(TimeStampedModel):
     what the effective prices were AT LOAD TIME, kept purely for
     audit/reference — they are NOT used in expected_revenue/cost/
     profit below. This stock has not been sold yet, so expected
-    profit tracks CURRENT effective pricing (current PriceHistory
+    profit tracks CURRENT pricing (the latest stock receipt price
     selling price, current recorded acquisition cost) per the
     finalized pricing decision (section 8: "current expected profit
     uses the current effective selling price against the relevant
@@ -378,13 +378,13 @@ class VehicleLoadItem(TimeStampedModel):
     @property
     def effective_selling_price(self):
         """
-        Current effective selling price for this product (live
-        lookup from PriceHistory), minus any promo discount applied
-        at load time. Tracks current pricing since this stock has
-        not yet been sold.
+        Current price of this product at this depot (the price on the
+        latest stock receipt), minus any promo discount applied at load
+        time. Tracks the current price since this stock has not yet
+        been sold.
         """
 
-        price = get_current_selling_price(self.product) - self.promo_discount
+        price = get_current_selling_price(self.product, depot=self.vehicle_load.depot) - self.promo_discount
 
         return max(price, Decimal("0.00"))
 
@@ -426,7 +426,9 @@ class VehicleLoadItem(TimeStampedModel):
                 "Promo discount cannot be negative."
             )
 
-        current_selling_price = get_current_selling_price(self.product)
+        current_selling_price = get_current_selling_price(
+            self.product, depot=self.vehicle_load.depot,
+        )
 
         if self.promo_discount > current_selling_price:
             raise ValidationError(
@@ -479,7 +481,9 @@ class VehicleLoadItem(TimeStampedModel):
                     self.vehicle_load.depot,
                     self.product,
                 )
-                self.selling_price = get_current_selling_price(self.product)
+                self.selling_price = get_current_selling_price(
+                    self.product, depot=self.vehicle_load.depot,
+                )
 
             super().save(*args, **kwargs)
 
@@ -712,7 +716,7 @@ def get_expected_profit_for_load(vehicle_load):
     """
     Calculate expected profit for the entire vehicle load using each
     item's current effective prices (this stock has not been sold
-    yet, so the figure moves as PriceHistory/acquisition cost move).
+    yet, so the figure moves with the latest receipt price).
     """
 
     total_profit = Decimal("0.00")

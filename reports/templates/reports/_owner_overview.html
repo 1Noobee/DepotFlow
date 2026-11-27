@@ -71,7 +71,7 @@
     <div class="bg-white p-5 rounded shadow min-w-0">
         <p class="text-sm text-gray-500">Stock in total</p>
         <p class="text-xl font-semibold break-all">&#8358;{{ o.live.total_stock_value|floatformat:"2g" }}</p>
-        <p class="text-xs text-gray-500 mt-1">warehouse + on the trucks, at cost</p>
+        <p class="text-xs text-gray-500 mt-1">warehouse + on the trucks, at receipt price</p>
     </div>
     <div class="bg-white p-5 rounded shadow min-w-0">
         <p class="text-sm text-gray-500">Expenses awaiting approval</p>
@@ -83,7 +83,7 @@
 <h2 class="font-semibold text-lg mb-1">{{ o.month.start|date:"F Y" }} so far</h2>
 <p class="text-xs text-gray-500 mb-3">Live, from {{ o.month.start|date:"d M" }} to {{ o.as_of|date:"d M" }}.</p>
 <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-    <div class="bg-white p-5 rounded shadow min-w-0"><p class="text-sm text-gray-500">Sales</p><p class="text-xl font-semibold break-all">&#8358;{{ o.month.revenue|floatformat:"2g" }}</p><p class="text-xs text-gray-500 mt-1">{{ o.month.units_sold }} units &middot; margin &#8358;{{ o.month.gross_margin|floatformat:"2g" }}</p></div>
+    <div class="bg-white p-5 rounded shadow min-w-0"><p class="text-sm text-gray-500">Sales</p><p class="text-xl font-semibold break-all">&#8358;{{ o.month.revenue|floatformat:"2g" }}</p><p class="text-xs text-gray-500 mt-1">{{ o.month.units_sold }} units</p></div>
     <div class="bg-white p-5 rounded shadow min-w-0"><p class="text-sm text-gray-500">Expenses</p><p class="text-xl font-semibold break-all">&#8358;{{ o.month.expenses|floatformat:"2g" }}</p></div>
     <div class="bg-white p-5 rounded shadow min-w-0"><p class="text-sm text-gray-500">NBC rebates received</p><p class="text-xl font-semibold break-all">&#8358;{{ o.month.rebates_received|floatformat:"2g" }}</p>
         <p class="text-xs text-gray-500 mt-1">

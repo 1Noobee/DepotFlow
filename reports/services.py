@@ -21,7 +21,6 @@ from inventory.models import Product, InventoryTransaction
 from inventory.services import (
     get_stock_balance,
     get_current_acquisition_cost,
-    get_current_selling_price,
 )
 from operations.models import VehicleLoad, get_expected_profit_for_load, SalesTarget
 from finance.models import Expense, BusinessLedger, SupplierRebate
@@ -194,8 +193,9 @@ def get_daily_stock_movement_report(depot, report_date):
 
 def get_current_inventory_report(depot):
     """
-    Current stock balance, acquisition cost, selling price, and
-    value for every product that has ever moved at this depot.
+    Current stock balance, price and value for every product that has
+    ever moved at this depot. The price is the one on the latest stock
+    receipt for that product at this depot.
 
     NOTE: this loops per-product to reuse the tested
     get_stock_balance()/get_current_acquisition_cost() helpers
@@ -214,16 +214,14 @@ def get_current_inventory_report(depot):
 
     for product in products:
         balance = get_stock_balance(depot, product)
-        cost = get_current_acquisition_cost(depot, product)
-        price = get_current_selling_price(product)
+        price = get_current_acquisition_cost(depot, product)
 
         rows.append({
             "sku": product.sku,
             "name": product.name,
             "stock_balance": balance,
-            "acquisition_cost": cost,
-            "selling_price": price,
-            "inventory_value": Decimal(balance) * cost,
+            "price": price,
+            "inventory_value": Decimal(balance) * price,
         })
 
     rows.sort(key=lambda r: r["name"])

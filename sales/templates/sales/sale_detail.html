@@ -25,9 +25,9 @@
     <div class="px-4 py-2 grid grid-cols-5 gap-4 text-xs font-medium text-gray-500 uppercase">
         <span>Product</span>
         <span>Quantity</span>
-        <span>Unit Price</span>
+        <span>Price</span>
         <span>Discount</span>
-        <span>Line Profit</span>
+        <span>Line Total</span>
     </div>
     {% for item in items %}
     <div class="px-4 py-3 grid grid-cols-5 gap-4 text-sm items-center">
@@ -35,7 +35,7 @@
         <span>{{ item.quantity }}</span>
         <span>&#8358;{{ item.unit_price }}</span>
         <span>&#8358;{{ item.discount_applied }}</span>
-        <span class="font-medium">&#8358;{{ item.line_profit }}</span>
+        <span class="font-medium">&#8358;{{ item.line_revenue }}</span>
     </div>
     {% empty %}
     <div class="px-4 py-6 text-gray-500 text-sm">No items on this sale.</div>
@@ -43,8 +43,6 @@
 </div>
 
 <div class="bg-white rounded shadow p-6 max-w-md space-y-2">
-    <div class="flex justify-between text-sm"><span class="text-gray-500">Total Revenue</span><span>&#8358;{{ sale.total_revenue }}</span></div>
-    <div class="flex justify-between text-sm"><span class="text-gray-500">Total Cost</span><span>&#8358;{{ sale.total_cost }}</span></div>
-    <div class="flex justify-between font-semibold"><span>Total Profit</span><span>&#8358;{{ sale.total_profit }}</span></div>
+    <div class="flex justify-between font-semibold"><span>Total</span><span>&#8358;{{ sale.total_revenue }}</span></div>
 </div>
 {% endblock %}

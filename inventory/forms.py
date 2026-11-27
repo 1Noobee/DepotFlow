@@ -7,10 +7,8 @@ from .models import Product, Supplier, StockReceipt, StockReceiptItem, Promotion
 
 class ProductForm(forms.ModelForm):
     """
-    base_cost_price/base_selling_price are deliberately excluded —
-    they're a display-only cache. Use PriceChangeForm (which goes
-    through inventory.services.record_price_change) to actually
-    change pricing.
+    There is no price field: the price of a product comes from the
+    stock receipt lines.
     """
 
     class Meta:
@@ -19,19 +17,6 @@ class ProductForm(forms.ModelForm):
             "sku", "name", "category", "package_type",
             "volume", "pack_size", "is_active",
         ]
-
-
-class PriceChangeForm(forms.Form):
-    """
-    Not a ModelForm — PriceHistory is append-only and must always
-    be created through inventory.services.record_price_change(),
-    never edited directly.
-    """
-
-    selling_price = forms.DecimalField(max_digits=12, decimal_places=2, min_value=0)
-    cost_price = forms.DecimalField(max_digits=12, decimal_places=2, min_value=0, required=False,
-                                     help_text="Optional informational reference; leave blank to keep the current reference.")
-    reason = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
 
 
 class SupplierForm(forms.ModelForm):
@@ -68,10 +53,25 @@ class StockReceiptForm(forms.ModelForm):
                 self.fields["depot"].widget = forms.HiddenInput()
 
 
+class StockReceiptItemForm(forms.ModelForm):
+    class Meta:
+        model = StockReceiptItem
+        fields = ["product", "quantity", "cost_price"]
+        labels = {"cost_price": "Current selling price"}
+        help_texts = {
+            "cost_price": (
+                "Enter the current price per case from the NBC invoice (VAT included). "
+                "This becomes the depot's current selling price. If it differs from "
+                "the previous price, DepotFlow updates the current price and records "
+                "the change in the price history."
+            )
+        }
+
+
 StockReceiptItemFormSet = inlineformset_factory(
     StockReceipt,
     StockReceiptItem,
-    fields=["product", "quantity", "cost_price", "rebate_landing_cost"],
+    form=StockReceiptItemForm,
     extra=1,
     can_delete=True,
 )

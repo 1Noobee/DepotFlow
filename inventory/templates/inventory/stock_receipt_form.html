@@ -15,9 +15,10 @@
     <div class="bg-white p-6 rounded shadow max-w-2xl">
         <h2 class="font-semibold mb-4">Line Items</h2>
         <p class="text-xs text-gray-500 mb-4">
-            Each item you fill in posts a RECEIPT inventory transaction
-            and permanently records the acquisition cost paid — it does
-            not affect the product's selling price.
+            Enter the current selling price per case shown on the NBC invoice
+            (VAT included). A different price on a new receipt becomes the
+            depot's new current selling price. DepotFlow keeps a record of
+            each change, including the previous price and the new price.
         </p>
 
         {% include "partials/dynamic_formset.html" with formset=formset add_label="Line Item" %}

@@ -155,7 +155,6 @@ def get_owner_overview(depot, today=None):
         "start": month_start,
         "revenue": sales["total_revenue"],
         "units_sold": sales["total_quantity"],
-        "gross_margin": sales["total_profit"],
         "expenses": profit["total_expenses"],
         "rebates_received": profit["total_rebates"],
         "net_profit": net_profit,

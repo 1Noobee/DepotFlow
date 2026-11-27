@@ -1,4 +1,5 @@
 from django.contrib import admin
+from .services import record_depot_price_changes
 from .models import (
     Product,
     PriceHistory,
@@ -7,6 +8,7 @@ from .models import (
     StockReceiptItem,
     InventoryTransaction,
     Promotion,
+    DepotPriceChange,
 )
 
 
@@ -47,9 +49,12 @@ class PriceHistoryAdmin(admin.ModelAdmin):
         "reason",
     )
 
+    def has_add_permission(self, request):
+        # Retired: the price now comes from stock receipts. Old rows are kept
+        # for reference only, so nobody can add one that would be ignored.
+        return False
+
     def has_change_permission(self, request, obj=None):
-        # Price history is append-only — a new effective-dated row
-        # is how you change pricing, never an edit to an old one.
         return False
 
     def has_delete_permission(self, request, obj=None):
@@ -118,6 +123,37 @@ class StockReceiptAdmin(admin.ModelAdmin):
             return ["invoice_number"]
         return []
 
+    def save_formset(self, request, form, formset, change):
+        if formset.model is not StockReceiptItem:
+            return super().save_formset(request, form, formset, change)
+
+        product_ids = {
+            item_form.cleaned_data["product"].pk
+            for item_form in formset.forms
+            if item_form.cleaned_data
+            and not item_form.cleaned_data.get("DELETE", False)
+            and item_form.cleaned_data.get("product") is not None
+        }
+        previous_prices = {}
+        for product_id in product_ids:
+            previous_item = (
+                StockReceiptItem.objects
+                .filter(
+                    stock_receipt__depot=form.instance.depot,
+                    product_id=product_id,
+                )
+                .order_by("-stock_receipt__receipt_date", "-created_at")
+                .first()
+            )
+            previous_prices[product_id] = (
+                previous_item.cost_price if previous_item else None
+            )
+
+        formset.save()
+        record_depot_price_changes(
+            form.instance, previous_prices, changed_by=request.user
+        )
+
 
 @admin.register(InventoryTransaction)
 class InventoryTransactionAdmin(admin.ModelAdmin):
@@ -137,6 +173,28 @@ class InventoryTransactionAdmin(admin.ModelAdmin):
         # The ledger itself must never be hand-edited — it's the
         # audit trail. Adjustments go through a new ADJUSTMENT
         # transaction, not an edit to an existing row.
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+@admin.register(DepotPriceChange)
+class DepotPriceChangeAdmin(admin.ModelAdmin):
+    list_display = (
+        "changed_at", "depot", "product", "previous_price",
+        "new_price", "stock_receipt", "changed_by",
+    )
+    list_filter = ("depot", "changed_at")
+    search_fields = ("product__sku", "product__name", "stock_receipt__invoice_number")
+    readonly_fields = (
+        "stock_receipt", "depot", "product", "previous_price",
+        "new_price", "changed_at", "changed_by",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
         return False
 
     def has_delete_permission(self, request, obj=None):

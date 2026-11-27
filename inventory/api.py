@@ -8,18 +8,14 @@ from rest_framework.permissions import IsAuthenticated
 from core.permissions import role_permission
 from core.scoping import is_unrestricted, user_can_access_depot
 from .models import Product, Supplier, Promotion
-from .serializers import (
-    ProductSerializer, PriceHistorySerializer, PriceChangeSerializer,
-    SupplierSerializer, PromotionSerializer,
-)
+from .serializers import ProductSerializer, SupplierSerializer, PromotionSerializer
 from .scoping import visible_promotions, can_edit_promotion
-from .services import record_price_change
 
 
 class OwnerReadOnlyViewSet(viewsets.ModelViewSet):
     """Depot Owners can read inventory reference data, never mutate it."""
     def get_permissions(self):
-        if getattr(self.request.user, "role", "") == "DEPOT_OWNER" and self.action in ("list", "retrieve", "price_history"):
+        if getattr(self.request.user, "role", "") == "DEPOT_OWNER" and self.action in ("list", "retrieve"):
             return [IsAuthenticated()]
         return super().get_permissions()
 
@@ -28,32 +24,6 @@ class ProductViewSet(OwnerReadOnlyViewSet):
     queryset = Product.objects.all().order_by("name")
     serializer_class = ProductSerializer
     permission_classes = [role_permission("SUPER_ADMIN", "DEPOT_MANAGER", "DEPOT_OFFICER")]
-
-    @action(detail=True, methods=["get"])
-    def price_history(self, request, pk=None):
-        product = self.get_object()
-        history = product.price_history.all()[:50]
-        return Response(PriceHistorySerializer(history, many=True).data)
-
-    @action(
-        detail=True,
-        methods=["post"],
-        permission_classes=[role_permission("SUPER_ADMIN", "DEPOT_MANAGER")],
-    )
-    def change_price(self, request, pk=None):
-        product = self.get_object()
-        serializer = PriceChangeSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        price_history = record_price_change(
-            product,
-            selling_price=serializer.validated_data["selling_price"],
-            cost_price=serializer.validated_data.get("cost_price"),
-            user=request.user,
-            reason=serializer.validated_data.get("reason", ""),
-        )
-
-        return Response(PriceHistorySerializer(price_history).data, status=201)
 
 
 class SupplierViewSet(OwnerReadOnlyViewSet):

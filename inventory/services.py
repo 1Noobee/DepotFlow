@@ -1,30 +1,21 @@
 """
 Inventory & pricing services.
 
-This module is the single authoritative place for:
+ONE PRICE. The price typed on a stock receipt line (per case, tax included, as on
+the NBC invoice) is the price the depot works with: it is what the stock cost, what
+the stock is valued at, and the price it is loaded and sold at. There is no separate
+selling price and no price-history workflow.
 
-- Looking up the current effective SELLING price of a product
-  (from PriceHistory, effective-date based).
-- Looking up the current ACQUISITION COST reference for a product
-  at a depot (from the most recently recorded StockReceiptItem —
-  i.e. the actual price paid for stock, not a mutable product field).
-- Computing current stock balance from the inventory transaction
-  ledger.
-
-Per the finalized inventory/pricing decision:
-
-- Product.base_cost_price / Product.base_selling_price are a
-  display-only cache and must NEVER be used for transactional or
-  reporting calculations.
-- Selling price is dynamic and effective-date based (PriceHistory).
-- Acquisition cost is preserved per stock receipt and is NOT
-  recalculated when supplier prices change later.
-- There is no InventoryBatch / FIFO layer. "Current acquisition
-  cost" for existing depot stock is the cost recorded on the most
-  recent stock receipt for that product/depot, consistent with the
-  system's existing no-FIFO approach.
-- Any code that needs "the price to use right now" must call these
-  functions rather than reading Product fields directly.
+- get_current_acquisition_cost() / get_current_selling_price() both return that one
+  price: the price on the most recent StockReceiptItem for the product at the depot.
+  (Two names are kept so the many callers do not all change at once.)
+- Each sale or load line stores the price it used at that moment, so later receipts
+  never rewrite past records.
+- There is no InventoryBatch / FIFO layer: when a new receipt records a different
+  price, existing stock and later sales use the new price.
+- Product.base_cost_price / base_selling_price and the old product-level PriceHistory
+  table are retired. DepotPriceChange is the new depot-specific audit trail.
+- Current stock balance is computed from the inventory transaction ledger.
 """
 
 from decimal import Decimal
@@ -34,61 +25,33 @@ from django.db.models import Sum
 from django.utils import timezone
 
 
-def get_current_price_history(product, as_of=None):
+def get_current_selling_price(product, depot=None):
     """
-    Return the PriceHistory row that is effective as of the given
-    datetime (defaults to now), or None if no price has ever been
-    recorded for this product.
+    The price the depot sells this product at: the price on the latest stock receipt
+    for it at `depot`. If no depot is given (for example an API listing of products),
+    the latest receipt at any depot is used. Returns 0.00 if it was never received.
     """
 
-    as_of = as_of or timezone.now()
+    if depot is not None:
+        return get_current_acquisition_cost(depot, product)
 
-    return (
-        product.price_history
-        .filter(effective_from__lte=as_of)
-        .order_by("-effective_from")
+    from inventory.models import StockReceiptItem
+
+    latest_item = (
+        StockReceiptItem.objects
+        .filter(product=product)
+        .order_by("-stock_receipt__receipt_date", "-created_at")
         .first()
     )
 
-
-def get_current_selling_price(product, as_of=None):
-    """
-    Return the current effective selling price for a product, based
-    on PriceHistory. Falls back to Product.base_selling_price only
-    if no PriceHistory record exists yet (e.g. a brand-new product
-    that hasn't had a price set through the pricing workflow).
-    """
-
-    price_history = get_current_price_history(product, as_of=as_of)
-
-    if price_history:
-        return price_history.selling_price
-
-    return product.base_selling_price
-
-
-def get_current_cost_reference(product, as_of=None):
-    """
-    Return the current supplier/commercial cost reference recorded
-    in PriceHistory. This is informational (e.g. for anticipating
-    the cost of the NEXT receipt) and must NOT be used to value
-    existing stock — use get_current_acquisition_cost() for that.
-    """
-
-    price_history = get_current_price_history(product, as_of=as_of)
-
-    if price_history:
-        return price_history.cost_price
-
-    return product.base_cost_price
+    return latest_item.effective_cost_price if latest_item else Decimal("0.00")
 
 
 def get_current_acquisition_cost(depot, product):
     """
-    Return the acquisition cost to use for valuing/expected-profit
-    calculations on EXISTING depot stock: the effective cost price
-    (after supplier discount/rebate) recorded on the most recent
-    StockReceiptItem for this product at this depot.
+    Return the price of this product at this depot: the price recorded on
+    the most recent StockReceiptItem (per case, tax included). It values
+    existing stock and is also the price the product is sold at.
 
     This deliberately does not use FIFO/batch tracking. If the
     depot has never received this product, returns Decimal("0.00").
@@ -113,6 +76,46 @@ def get_current_acquisition_cost(depot, product):
     return latest_item.effective_cost_price
 
 
+
+def record_depot_price_changes(receipt, previous_prices, changed_by=None):
+    """Persist an immutable audit row for each actual current-price change.
+
+    ``previous_prices`` maps product IDs to the effective depot price before
+    the receipt was saved. A first receipt establishes the starting price and
+    is not treated as a change. Backdated receipts that do not alter the
+    effective current price do not create a change record.
+    """
+    from inventory.models import DepotPriceChange, StockReceiptItem
+
+    changes = []
+    for product_id, previous_price in previous_prices.items():
+        if previous_price is None:
+            continue
+
+        current_item = (
+            StockReceiptItem.objects
+            .filter(stock_receipt__depot=receipt.depot, product_id=product_id)
+            .select_related("product")
+            .order_by("-stock_receipt__receipt_date", "-created_at")
+            .first()
+        )
+        if current_item is None or current_item.cost_price == previous_price:
+            continue
+
+        change, created = DepotPriceChange.objects.get_or_create(
+            stock_receipt=receipt,
+            product=current_item.product,
+            defaults={
+                "depot": receipt.depot,
+                "previous_price": previous_price,
+                "new_price": current_item.cost_price,
+                "changed_by": changed_by,
+            },
+        )
+        if created:
+            changes.append(change)
+    return changes
+
 def get_stock_balance(depot, product):
     """
     Return the current physical stock balance for a product at a
@@ -129,65 +132,6 @@ def get_stock_balance(depot, product):
 
     return balance or 0
 
-
-def record_price_change(product, selling_price, cost_price=None, effective_from=None, user=None, reason=""):
-    """
-    Record a new effective-dated selling price (and, optionally, an
-    informational cost reference) for a product.
-
-    This is the preferred way to change pricing. It does not touch
-    physical inventory or stock receipts in any way.
-    """
-
-    from inventory.models import PriceHistory
-
-    if selling_price < 0:
-        raise ValueError("Selling price cannot be negative.")
-
-    if cost_price is not None and cost_price < 0:
-        raise ValueError("Cost price cannot be negative.")
-
-    effective_from = effective_from or timezone.now()
-
-    previous = get_current_price_history(product, as_of=effective_from)
-
-    price_history = PriceHistory.objects.create(
-        product=product,
-        cost_price=cost_price if cost_price is not None else get_current_cost_reference(product, as_of=effective_from),
-        selling_price=selling_price,
-        effective_from=effective_from,
-        changed_by=user,
-        reason=reason,
-    )
-
-    # Refresh the display-cache fields on Product for admin/list
-    # convenience only — never read back for calculations.
-    Product = product.__class__
-    Product.objects.filter(pk=product.pk).update(
-        base_selling_price=price_history.selling_price,
-        base_cost_price=price_history.cost_price,
-        updated_at=timezone.now(),
-    )
-
-    from core.audit import log_action
-    from core.models import AuditLog
-
-    log_action(
-        AuditLog.Action.PRICE_CHANGE,
-        obj=product,
-        user=user,
-        old_value={
-            "selling_price": str(previous.selling_price) if previous else None,
-            "cost_price": str(previous.cost_price) if previous else None,
-        },
-        new_value={
-            "selling_price": str(price_history.selling_price),
-            "cost_price": str(price_history.cost_price),
-        },
-        notes=reason,
-    )
-
-    return price_history
 
 def get_applicable_promotions(product, level, quantity=1, depot=None, supplier=None, as_of=None):
     """

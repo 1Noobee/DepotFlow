@@ -23,7 +23,7 @@ class VehicleLoadItemSerializer(serializers.ModelSerializer):
     cost_price/selling_price are the point-in-time snapshot taken at
     load time (audit only) — set by VehicleLoadItem.save(), never
     submitted by the client. effective_*/expected_* are the live
-    figures (current PriceHistory / current acquisition cost) and
+    figures (the current receipt price) and
     are always read-only, computed properties.
     """
 
